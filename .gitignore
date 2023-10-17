@@ -1,0 +1,10 @@
+.vscode
+settings.toml
+settings.toml.bak
+tickertape.py
+timemanager.py.bak
+boot_out.txt
+.Trashes
+.metadata_never_index
+.fseventsd
+System Volume Information
