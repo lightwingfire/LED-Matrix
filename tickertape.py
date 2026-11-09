@@ -8,7 +8,7 @@ import math
 import aiohttp
 import socket
 import os
-from datetime import datetime, timedelta,date
+from datetime import datetime, timedelta,date, timezone
 
 class ticktape:
     def __init__(self,x,y,canvas):
@@ -24,7 +24,7 @@ class ticktape:
         self.textColorRaw = graphics.Color(255, 255, 0)
         self.textColor = self.textColorRaw
         self.text = self.get_ip_address()
-        self.scrollSpeed = 15
+        self.scrollSpeed = 18
 
         # articles = open('cachedArticles.json')
         # self.newsJson = json.load(articles)
@@ -60,11 +60,12 @@ class ticktape:
     def setText(self, text):
         self.text = text
 
-    def render(self):
-        graphics.DrawText(self.canvas,self.font,math.floor(self.x),self.y,self.textColor,self.text)
+    def render(self, canvas=None):
+        graphics.DrawText(canvas if canvas is not None else self.canvas,
+                          self.font,math.floor(self.x),self.y,self.textColor,self.text)
 
     def update(self,dt):  
-        self.x = self.x - .3
+        self.x -= self.scrollSpeed * dt
         # self.x = math.ceil(self.x - 1)
         # print (dt*self.scrollSpeed)
         # if self.x+self.getWidth() <1:
@@ -76,6 +77,7 @@ import random
 
 class TickerTapeManager:
     def __init__(self,canvas):
+        self.scrollSpeed = 18
         self.queque = [ticktape(128,32,canvas)]
         self.canvas = canvas
         self.change = True
@@ -84,11 +86,19 @@ class TickerTapeManager:
         self.newsJson = json
         self.brightness = 1
         self.isHidden = False
+        self.newsUpdatedAt = None
+        self.newsCached = True
+        self.newsPlaylist = []
+        self.newsPlaylistSource = ()
+        self.lastHeadline = None
 
         with open('cachedArticles.json', 'r') as file:
             # print(json.load(file))
             self.newsJson = json.load(file)
         
+
+    def setSpeed(self, speed):
+        self.scrollSpeed = speed
 
     def setBrightness(self,br):
         if self.isHidden:
@@ -107,7 +117,6 @@ class TickerTapeManager:
         self.isHidden = True
 
     async def refreshInfo(self):
-        self.queque[-1].setText(f"ip:{self.queque[0].get_ip_address()} Articles Date: {self.yestarday}")
         await self.getNews()
 
     async def getNews(self):
@@ -139,7 +148,6 @@ class TickerTapeManager:
         print(yestarday)
         if self.yestarday == yestarday:
             return
-        self.yestarday = yestarday
 
         url = ('https://newsapi.org/v2/everything?'
         'from='+str(yestarday)+'&'
@@ -157,16 +165,14 @@ class TickerTapeManager:
         # articles = requests.get(url,allow_redirects=True,timeout=5)
         
         print("News response received")
-        try:
-            if len(articles["articles"])  == 0:
-                issueJson = [articles["status"],articles["code"],articles["message"]]
-                self.newsJson[articles] = issueJson
-                raise Exception("no articles found")
-                
-            else:
-                self.newsJson = articles
-        except:
-            "could not get new articles"
+        if articles.get("status") != "ok" or not isinstance(articles.get("articles"), list):
+            raise ValueError("News provider returned an unsuccessful response")
+        if not articles["articles"]:
+            raise ValueError("News provider returned no stories")
+        self.newsJson = articles
+        self.yestarday = yestarday
+        self.newsUpdatedAt = datetime.now(timezone.utc).isoformat()
+        self.newsCached = False
 
             # self.numOfTitles = len(self.newsJson["articles"])
         # except:
@@ -178,28 +184,30 @@ class TickerTapeManager:
         return
 
     def getNextInfo(self):
-        # Wurd = ["test BUDDYHOLLY"," KING sHIT butt","Hello Worly","heh hehhe HEHEHE HHEHE"]
-        # return random.choice(Wurd)
-        # newsApiKey = os.getenv("NEWS_API_KEY")
-        
-        text = ""
-        # check = True
-        newsList = []
-        for r in self.newsJson["articles"]:
-            newsList.append(r["title"])
-        
-        if len(newsList)>0:
-            text = random.choice(newsList) + " "
-        else:
-            text = "ERROR - NO ARTICLES WERE RETRIEVED"
-        # randHue = random.uniform(.5,1)
-        # if self.queque[-2].textColor == graphics.Color(0,255,255):
-        #     self.queque[-1].textColor = graphics.Color(205,205,0)
-        #     return text
+        # Deduplicate and validate titles before building a complete rotation.
+        headlines = []
+        for article in self.newsJson.get("articles", []):
+            title = article.get("title") if isinstance(article, dict) else None
+            if isinstance(title, str) and title.strip() and title.strip() != "[Removed]":
+                headlines.append(title.strip())
+        source = tuple(dict.fromkeys(headlines))
+        if source != self.newsPlaylistSource:
+            self.newsPlaylistSource = source
+            self.newsPlaylist = []
+
+        if not source:
+            return "ERROR - NO ARTICLES WERE RETRIEVED "
+        if not self.newsPlaylist:
+            self.newsPlaylist = list(source)
+            random.shuffle(self.newsPlaylist)
+            # Avoid repeating the same headline across two rotations.
+            if len(self.newsPlaylist) > 1 and self.newsPlaylist[-1] == self.lastHeadline:
+                self.newsPlaylist[0], self.newsPlaylist[-1] = self.newsPlaylist[-1], self.newsPlaylist[0]
+        self.lastHeadline = self.newsPlaylist.pop()
+        text = self.lastHeadline + " "
         possibleColors = [graphics.Color(0,255,255),graphics.Color(0, 150, 255),graphics.Color(0, 163, 108)]
         
         self.queque[-1].setTTColor(random.choice(possibleColors))
-        # self.queque[-1].textColor = graphics.Color(int(255 * randHue),int(255 * randHue),0)
         return text
 
     def update(self,dt):
@@ -257,14 +265,15 @@ class TickerTapeManager:
         # print(wards)
 
         for words in self.queque:
+            words.scrollSpeed = self.scrollSpeed
             words.update(dt)
         self.change = True
 
         # print(len(self.queque))
     
-    def render(self):
+    def render(self, canvas=None):
         for words in self.queque:
-            words.render()
+            words.render(canvas)
 
     def changed(self):
         change = self.change

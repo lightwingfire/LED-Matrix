@@ -25,11 +25,16 @@
 <!DOCTYPE html> 
   <html>
   <head>
+  <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
   .slidecontainer {
     width: 100%;
   }
+  #newsStories { margin-top: 2rem; }
+  #newsList { padding-left: 1.5rem; }
+  #newsList li { margin-bottom: 1rem; }
+  .news-meta { display: block; color: #555; font-size: 0.9rem; margin-top: 0.25rem; }
   
   .slider {
     -webkit-appearance: none;
@@ -81,6 +86,13 @@
       <p>Current Brightness Value: <span id="brightnessValue"></span></p>
       <input type="range" min="1" max="100" value={{sliderValue}} class="slider" name = "tot" id="myRange">
     </div>
+    <div class="slidecontainer">
+      <label for="tickerSpeed">Ticker speed: <output id="tickerSpeedValue" for="tickerSpeed">{{ tickerSpeed }}</output> pixels/second</label>
+      <input type="range" min="0" max="100" step="1" value="{{ tickerSpeed }}"
+             class="slider" id="tickerSpeed" aria-describedby="tickerSpeedHelp">
+      <p id="tickerSpeedHelp">0 pauses scrolling. Changes apply immediately and reset when the app restarts.</p>
+      <p id="tickerSpeedStatus" role="status" aria-live="polite"></p>
+    </div>
     <div>
       <p>Do Timed Brightness Setting</p>
       <input type="checkbox" id="doTimedBrightness" checked>
@@ -94,7 +106,89 @@
       </div>
     </div>
   
+    <section id="newsStories" aria-labelledby="newsHeading">
+      <h2 id="newsHeading">Current news stories</h2>
+      <p>Headlines available to the LED ticker.</p>
+      <p id="newsStatus" role="status" aria-live="polite">{% if news.cached %}Showing cached stories while news loads.{% else %}Showing the latest loaded stories.{% endif %}</p>
+      <p id="newsError" role="status">{{ news.error or '' }}</p>
+      <ol id="newsList">
+        {% for article in news.articles %}
+        <li>
+          {% if article.url %}<a href="{{ article.url }}" target="_blank" rel="noopener noreferrer">{{ article.title }}</a>{% else %}<span>{{ article.title }}</span>{% endif %}
+          <span class="news-meta">{{ article.source }}{% if article.source and article.publishedAt %} · {% endif %}{{ article.publishedAt }}</span>
+        </li>
+        {% endfor %}
+      </ol>
+      <p id="newsEmpty" {% if news.articles %}hidden{% endif %}>No news stories are available yet.</p>
+    </section>
+
   <script>
+  const tickerSpeed = document.getElementById('tickerSpeed');
+  const tickerSpeedValue = document.getElementById('tickerSpeedValue');
+  const tickerSpeedStatus = document.getElementById('tickerSpeedStatus');
+  tickerSpeed.addEventListener('input', function() {
+    tickerSpeedValue.textContent = tickerSpeed.value;
+  });
+  tickerSpeed.addEventListener('change', async function() {
+    tickerSpeedStatus.textContent = 'Applying speed...';
+    try {
+      const response = await fetch('/ticker-speed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ speed: Number(tickerSpeed.value) })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not change ticker speed.');
+      tickerSpeedValue.textContent = data.speed;
+      tickerSpeedStatus.textContent = data.speed === 0 ? 'Ticker paused.' : 'Speed applied.';
+    } catch (error) {
+      tickerSpeedStatus.textContent = error.message;
+    }
+  });
+
+  let lastNewsSnapshot = null;
+  async function loadNews() {
+    try {
+      const response = await fetch('/news', { cache: 'no-store' });
+      if (!response.ok) throw new Error('Unable to load stories.');
+      const data = await response.json();
+      const snapshot = JSON.stringify(data);
+      document.getElementById('newsError').textContent = data.error || '';
+      if (snapshot === lastNewsSnapshot) return;
+      lastNewsSnapshot = snapshot;
+      const list = document.getElementById('newsList');
+      const items = document.createDocumentFragment();
+      for (const article of data.articles) {
+        const item = document.createElement('li');
+        const title = document.createElement(article.url ? 'a' : 'span');
+        title.textContent = article.title;
+        if (article.url) {
+          title.href = article.url;
+          title.target = '_blank';
+          title.rel = 'noopener noreferrer';
+        }
+        item.appendChild(title);
+        const meta = document.createElement('span');
+        meta.className = 'news-meta';
+        const published = new Date(article.publishedAt);
+        const date = Number.isNaN(published.getTime()) ? '' : published.toLocaleString();
+        meta.textContent = [article.source, date].filter(Boolean).join(' · ');
+        item.appendChild(meta);
+        items.appendChild(item);
+      }
+      list.replaceChildren(items);
+      document.getElementById('newsEmpty').hidden = data.articles.length > 0;
+      const updated = data.updatedAt ? new Date(data.updatedAt).toLocaleString() : '';
+      document.getElementById('newsStatus').textContent = data.cached
+        ? 'Showing cached stories while news loads.'
+        : 'Latest loaded stories' + (updated ? ' — updated ' + updated : '') + '.';
+    } catch (error) {
+      document.getElementById('newsError').textContent = 'Could not update the story list. Retrying automatically.';
+    }
+  }
+  loadNews();
+  setInterval(loadNews, 30000);
+
   document.getElementById('weatherLocationForm').addEventListener('submit', async function(event) {
     event.preventDefault();
     const button = document.getElementById('saveWeatherZipcode');

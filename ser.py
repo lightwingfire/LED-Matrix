@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, jsonify
 import os
 import re
 import threading
+from urllib.parse import urlsplit
 from config import PROJECT_DIR, save_weather_location
 import socket
 class ser():
@@ -11,11 +12,17 @@ class ser():
         self.app = Flask(__name__, template_folder=str(PROJECT_DIR / "Templates"))
         self.ip = os.getenv("WEB_HOST", "127.0.0.1")
         self.sliderValue = 100
+        self.tickerSpeed = 18
         self.weatherLocation = os.getenv("WEATHER_LOCATION", "08865")
         self.locationLock = threading.Lock()
+        self.newsLock = threading.Lock()
+        self.news = dict(articles=[], updatedAt=None, cached=True, error=None)
         self.app.add_url_rule('/','page',self.page, methods=['GET', 'POST'])
         self.app.add_url_rule('/weather-location', 'weather_location',
                               self.setWeatherLocation, methods=['POST'])
+        self.app.add_url_rule('/news', 'news', self.getNews, methods=['GET'])
+        self.app.add_url_rule('/ticker-speed', 'ticker_speed', self.setTickerSpeed,
+                              methods=['GET', 'POST'])
         # threading.Thread(target=self.start()).start()
         # self.start()
 
@@ -32,7 +39,54 @@ class ser():
             if request.method == 'GET':
                 print("this is a test") 
             return render_template("index.html",ip = self.ip, sliderValue = self.sliderValue,
-                                   weatherLocation=self.weatherLocation)
+                                   weatherLocation=self.weatherLocation, news=self.newsSnapshot(),
+                                   tickerSpeed=self.tickerSpeed)
+
+    def getTickerSpeed(self):
+        return self.tickerSpeed
+
+    def setTickerSpeed(self):
+        if request.method == 'POST':
+            data = request.get_json(silent=True)
+            speed = data.get('speed') if isinstance(data, dict) else None
+            if type(speed) is not int or not 0 <= speed <= 100:
+                return jsonify(error="Choose a speed from 0 to 100 pixels per second."), 400
+            self.tickerSpeed = speed
+        return jsonify(speed=self.tickerSpeed)
+
+    def setNews(self, data, updated_at=None, cached=True, error=None):
+        articles = []
+        for article in data.get("articles", []):
+            if not isinstance(article, dict):
+                continue
+            title = article.get("title")
+            if not isinstance(title, str) or not title.strip() or title.strip() == "[Removed]":
+                continue
+            url = article.get("url")
+            try:
+                parsed = urlsplit(url) if isinstance(url, str) else None
+                if not parsed or parsed.scheme not in ("http", "https") or not parsed.netloc:
+                    url = None
+            except ValueError:
+                url = None
+            source = article.get("source")
+            source = source.get("name") if isinstance(source, dict) else None
+            published = article.get("publishedAt")
+            articles.append(dict(title=title, url=url,
+                                 source=source if isinstance(source, str) else "",
+                                 publishedAt=published if isinstance(published, str) else ""))
+        with self.newsLock:
+            self.news = dict(articles=articles, updatedAt=updated_at,
+                             cached=cached, error=error)
+
+    def newsSnapshot(self):
+        with self.newsLock:
+            return self.news
+
+    def getNews(self):
+        response = jsonify(self.newsSnapshot())
+        response.headers["Cache-Control"] = "no-store"
+        return response
 
     def getWeatherLocation(self):
         return self.weatherLocation

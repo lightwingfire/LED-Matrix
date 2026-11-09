@@ -53,8 +53,9 @@ class ClockFace:
         self.change = False
         return change
 
-    def render(self):
-        graphics.DrawText(self.canvas,self.font,self.x,self.y,self.textColor,self.text)
+    def render(self, canvas=None):
+        graphics.DrawText(canvas if canvas is not None else self.canvas,
+                          self.font,self.x,self.y,self.textColor,self.text)
 
     def updateFace(self,*, hours=None, minutes=None, show_colon=False):
         self.now = time.localtime()  # Get the time values we need

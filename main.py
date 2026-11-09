@@ -27,7 +27,7 @@ def create_display():
     options.cols = 128
     if hasattr(options, "browser"):
         options.browser.port = int(os.getenv("EMULATOR_PORT", options.browser.port))
-    options.show_refresh_rate = 60
+    options.show_refresh_rate = os.getenv("SHOW_REFRESH_RATE", "0") == "1"
     # options.pwm_bits = 11
     # options.pwm_lsb_nanoseconds = 300
     matrix = RGBMatrix(options = options)
@@ -43,17 +43,12 @@ async def main(matrix, canvas):
     clock = ClockFace(4,16,canvas)
     wM = weatherManager(canvas)
     tt = TickerTapeManager(canvas)
+    webpage.setNews(tt.newsJson, updated_at=tt.newsUpdatedAt, cached=tt.newsCached)
 
     change = 0
 
     start_time = time.monotonic()
-    current_time = time.monotonic()
-    dt = current_time - start_time
-    start_time = current_time
-
-    #adjusts sleep time to account for fluxuations in time
-    if dt < 1.0 / 60:
-        time.sleep((1.0 / 60) - dt)
+    dt = 0
 
     def updateDeltaTime():
         clock.updateFace()
@@ -61,6 +56,15 @@ async def main(matrix, canvas):
         tt.update(dt)
 
     async def refreshAPI(weather_only=False):
+        async def refreshNews():
+            try:
+                await tt.refreshInfo()
+            except Exception:
+                webpage.setNews(tt.newsJson, updated_at=tt.newsUpdatedAt, cached=tt.newsCached,
+                                error="News refresh failed. Showing previously loaded stories.")
+                raise
+            webpage.setNews(tt.newsJson, updated_at=tt.newsUpdatedAt, cached=tt.newsCached)
+
         async def refresh(name, callback):
             try:
                 await callback()
@@ -70,7 +74,7 @@ async def main(matrix, canvas):
 
         jobs = [refresh("Weather", wM.refreshInfo)]
         if not weather_only:
-            jobs.append(refresh("News", tt.refreshInfo))
+            jobs.append(refresh("News", refreshNews))
         await asyncio.gather(*jobs)
 
         # try:
@@ -87,9 +91,9 @@ async def main(matrix, canvas):
 
     # await asyncio.sleep(0.1)
     def render():
-        clock.render()
-        wM.render()
-        tt.render()
+        clock.render(canvas)
+        wM.render(canvas)
+        tt.render(canvas)
 
     def checkForChange():
         if tt.changed() or clock.changed() or wM.changed() or change != webpage.getSlider():
@@ -100,6 +104,9 @@ async def main(matrix, canvas):
     refresh_task = asyncio.create_task(refreshAPI())
     while True:
         frame_start = time.monotonic()
+        dt = frame_start - start_time
+        start_time = frame_start
+        tt.setSpeed(webpage.getTickerSpeed())
         updateDeltaTime()
         if refresh_task.done() and wM.location != webpage.getWeatherLocation():
             wM.location = webpage.getWeatherLocation()
@@ -121,9 +128,6 @@ async def main(matrix, canvas):
             
 
         canvas = matrix.SwapOnVSync(canvas)
-        current_time = time.monotonic()
-        dt = current_time - start_time
-        start_time = current_time
 
         #adjusts sleep time to account for fluxuations in time
         await asyncio.sleep(max(0, 1.0 / 60 - (time.monotonic() - frame_start)))

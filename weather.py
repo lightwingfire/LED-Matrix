@@ -76,9 +76,10 @@ class weather:
         else:
             self.setBrightness(self.brightness)
 
-    def render(self):
-        graphics.DrawText(self.canvas,self.font,self.x,self.y+21,self.textColor,self.temp)
-        self.sprite.toCanvas()
+    def render(self, canvas=None):
+        canvas = canvas if canvas is not None else self.canvas
+        graphics.DrawText(canvas,self.font,self.x,self.y+21,self.textColor,self.temp)
+        self.sprite.toCanvas(canvas)
 
     def update(self):
         # self.setWeatherIcon(1006)
@@ -215,26 +216,27 @@ class weatherToday:
         self.temp4 = upComingWeather[7][1]
         self.setWeatherIcon(upComingWeather[7][2],self.sprite4)        
 
-    def render(self):
-        graphics.DrawText(self.canvas,self.font,70,24,self.textColorDay,self.weekDay)
-        graphics.DrawText(self.canvas,self.font,70,17,self.textColor,self.tempNow)
-        self.spriteNow.toCanvas()
+    def render(self, canvas=None):
+        canvas = canvas if canvas is not None else self.canvas
+        graphics.DrawText(canvas,self.font,70,24,self.textColorDay,self.weekDay)
+        graphics.DrawText(canvas,self.font,70,17,self.textColor,self.tempNow)
+        self.spriteNow.toCanvas(canvas)
 
-        graphics.DrawText(self.canvas,self.font,86,24,self.textColorOdd,self.textTime1)
-        graphics.DrawText(self.canvas,self.font,86,17,self.textColorOdd,self.temp1)
-        self.sprite1.toCanvas()
+        graphics.DrawText(canvas,self.font,86,24,self.textColorOdd,self.textTime1)
+        graphics.DrawText(canvas,self.font,86,17,self.textColorOdd,self.temp1)
+        self.sprite1.toCanvas(canvas)
 
-        graphics.DrawText(self.canvas,self.font,97,24,self.textColor,self.textTime2)
-        graphics.DrawText(self.canvas,self.font,97,17,self.textColor,self.temp2)
-        self.sprite2.toCanvas()
+        graphics.DrawText(canvas,self.font,97,24,self.textColor,self.textTime2)
+        graphics.DrawText(canvas,self.font,97,17,self.textColor,self.temp2)
+        self.sprite2.toCanvas(canvas)
 
-        graphics.DrawText(self.canvas,self.font,107,24,self.textColorOdd,self.textTime3)
-        graphics.DrawText(self.canvas,self.font,107,17,self.textColorOdd,self.temp3)
-        self.sprite3.toCanvas()
+        graphics.DrawText(canvas,self.font,107,24,self.textColorOdd,self.textTime3)
+        graphics.DrawText(canvas,self.font,107,17,self.textColorOdd,self.temp3)
+        self.sprite3.toCanvas(canvas)
 
-        graphics.DrawText(self.canvas,self.font,118,24,self.textColor,self.textTime4)
-        graphics.DrawText(self.canvas,self.font,118,17,self.textColor,self.temp4)
-        self.sprite4.toCanvas()
+        graphics.DrawText(canvas,self.font,118,24,self.textColor,self.textTime4)
+        graphics.DrawText(canvas,self.font,118,17,self.textColor,self.temp4)
+        self.sprite4.toCanvas(canvas)
 
     def update(self):
         pass
@@ -362,16 +364,17 @@ class weatherManager:
         #     canvas.SetPixel(x1,y1+r, self.brightnessV *colorOfFrame[0], self.brightnessV * colorOfFrame[1], self.brightnessV * colorOfFrame[2])
         #     canvas.SetPixel(x2,y1+r, self.brightnessV *colorOfFrame[0], self.brightnessV * colorOfFrame[1], self.brightnessV * colorOfFrame[2])
 
-    def render(self):
+    def render(self, canvas=None):
+        canvas = canvas if canvas is not None else self.canvas
         if not self.weather0.hidden:
-            self.weather0.render()
-            self.weather1.render()
-            self.weather2.render()
-            self.weather3.render()
-            self.drawRectangle(self.canvas,68,0,81,24)
+            self.weather0.render(canvas)
+            self.weather1.render(canvas)
+            self.weather2.render(canvas)
+            self.weather3.render(canvas)
+            self.drawRectangle(canvas,68,0,81,24)
         else:
-            self.weatherToday.render()
-            self.drawRectangle(self.canvas,68,0,127,24)
+            self.weatherToday.render(canvas)
+            self.drawRectangle(canvas,68,0,127,24)
     
     def update(self,dt):
         self.swapTime += dt

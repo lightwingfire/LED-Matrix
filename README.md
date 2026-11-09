@@ -23,10 +23,22 @@ py -3.11 -m venv .venv
 Open http://localhost:8888 for the matrix and http://127.0.0.1:5000
 for the brightness slider. Press Ctrl+C in PowerShell to stop.
 
+Use the **Ticker speed** slider on that page to change scrolling from 0 to 100
+pixels per second; 0 pauses it. Speed defaults to 18 pixels per second and resets
+when the app restarts. Movement uses elapsed time so the chosen speed stays
+consistent when the emulator's frame rate changes.
+
 The settings page also includes a weather ZIP code field. Enter a US ZIP code
 or ZIP+4 and click **Save ZIP code**. It saves `WEATHER_LOCATION` in your local
 `settings.toml` and refreshes the forecast automatically. If a refresh is already
 running, the new ZIP code is fetched when that request finishes.
+
+The page also lists the news stories loaded by the LED ticker, with article
+links, sources, and publication dates. It checks for updated stories every
+30 seconds without making additional requests to the news provider. Cached
+stories and refresh failures are labeled so you can tell when the feed is stale.
+The ticker plays each valid, distinct headline once per shuffled rotation before
+repeating. Refreshing the feed leaves already queued stories intact.
 
 ## Local settings
 
@@ -55,3 +67,17 @@ $env:EMULATOR_PORT = "8889"
 ```
 
 In that example, use http://127.0.0.1:5001 and http://localhost:8889.
+
+## Existing Raspberry Pi installation
+
+`run.sh` uses the Pi's existing `venv/bin/python` and native matrix driver.
+It supports reboot cron entries that invoke `sh run.sh` and exposes the web
+controls on port 5000 on the local network. The Windows emulator dependencies
+are not needed for this deployment.
+
+On the deployed Pi, application settings live in `runtime/settings.toml`.
+This private directory is writable by the account used after the matrix driver
+drops privileges, so saving a ZIP code works without making the source writable.
+`LED_SETTINGS_FILE` can select another settings file. SSH credentials are not
+copied to the Pi. Driver refresh-rate logging is off by default; set
+`SHOW_REFRESH_RATE=1` when running Python directly to enable it for diagnostics.

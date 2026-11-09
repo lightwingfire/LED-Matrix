@@ -8,9 +8,13 @@ from pathlib import Path
 PROJECT_DIR = Path(__file__).resolve().parent
 
 
+def settings_path():
+    return Path(os.getenv("LED_SETTINGS_FILE", str(PROJECT_DIR / "settings.toml")))
+
+
 def save_weather_location(location):
     """Update only the location, preserving the other local settings."""
-    path = PROJECT_DIR / "settings.toml"
+    path = settings_path()
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     # Only inspect root-level settings, before any TOML table headers.
     header = re.search(r"(?m)^\s*\[", text)
@@ -22,7 +26,7 @@ def save_weather_location(location):
         root = assignment + "\n" + root
     temporary_path = None
     try:
-        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=PROJECT_DIR,
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
                                          prefix=".weather-settings-", suffix=".tmp",
                                          delete=False) as file:
             temporary_path = Path(file.name)
@@ -35,7 +39,7 @@ def save_weather_location(location):
 
 
 def load_settings():
-    path = PROJECT_DIR / "settings.toml"
+    path = settings_path()
     if not path.exists():
         return
     try:

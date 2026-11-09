@@ -2,6 +2,8 @@
 settings.toml
 settings.toml.bak
 .weather-settings-*.tmp
+/runtime/
+run.log
 .env
 .env.*
 

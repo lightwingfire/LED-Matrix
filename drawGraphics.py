@@ -23,7 +23,8 @@ class drawGraphic:
     
     def setBrightness(self, br):
         self.br = br
-    def toCanvas(self):
+    def toCanvas(self, canvas=None):
+        canvas = canvas if canvas is not None else self.canvas
         if self.sprite is None:
             return
         im = list(self.sprite.getdata())
@@ -31,7 +32,7 @@ class drawGraphic:
         for h in range(self.height):
             for w in range(self.width):
                 
-                self.canvas.SetPixel(self.x + w,
+                canvas.SetPixel(self.x + w,
                                      self.y + h,
                                      self.br * im[ww][0],
                                      self.br * im[ww][1],
