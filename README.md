@@ -23,10 +23,68 @@ py -3.11 -m venv .venv
 Open http://localhost:8888 for the matrix and http://127.0.0.1:5000
 for the brightness slider. Press Ctrl+C in PowerShell to stop.
 
+The controls page is a responsive React dashboard served by Flask at the same
+address. It includes brightness, ticker speed, weather location, and the current
+news rotation. The old page's schedule inputs did not control the backend;
+automatic brightness scheduling is labeled as unavailable.
+
+### Edit the React interface
+
+Source files live in `frontend/`. With Node.js 22.12+ or 24 installed:
+
+```powershell
+npm ci --cache .npm-cache
+npm run build
+```
+
+Reload http://127.0.0.1:5000 after building. Use `npm run dev` to rebuild on
+source changes while the Python app runs in another terminal; reload the browser
+to see updates. The bundled files in `static/ui/` are included in the repository,
+so normal Windows and Raspberry Pi operation needs neither Node.js nor a CDN.
+Include rebuilt assets when deploying interface changes to the Pi.
+
+### Build and deploy to the Raspberry Pi
+
+Install the local deployment dependencies once:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements-deploy.txt
+```
+
+Keep `PI_IP`, `PI_UN`, and `PI_PSW` in your ignored local `settings.toml`.
+Then build and deploy with:
+
+```powershell
+npm run deploy
+```
+
+The script builds React, packages the Python app and display assets, connects
+over SSH, and finds the existing `~/main/test/test` installation. It backs up
+the files it replaces under `.deploy-backups/` on the Pi, restarts the app using
+`run.sh`, and verifies the served JavaScript, CSS, and ticker API. Failed health
+checks trigger an attempt to restore the previous files and restart the app.
+The reboot cron entry, virtual environment, settings, and news cache stay intact.
+Credentials are neither printed nor uploaded. SSH host keys are remembered in
+the ignored local `.deploy/known_hosts` file after the first connection.
+
+To check the connection without deploying, run `npm run deploy -- -Inspect`.
+To build a local package without connecting, run `npm run deploy -- -BuildOnly`.
+Use `-RemoteDir /absolute/project/path` or `-WebPort 5001` to override defaults.
+The board must already have its Python dependencies and native matrix driver,
+and the SSH account needs passwordless sudo as used by `run.sh`.
+
+The underlying Python script also works outside PowerShell:
+`python scripts/deploy_board.py` (options: `--inspect`, `--build-only`,
+`--remote-dir`, `--web-port`).
+
 Use the **Ticker speed** slider on that page to change scrolling from 0 to 100
 pixels per second; 0 pauses it. Speed defaults to 18 pixels per second and resets
 when the app restarts. Movement uses elapsed time so the chosen speed stays
 consistent when the emulator's frame rate changes.
+
+The **Ticker tape** toggle in **News** hides the ticker and stops its movement.
+Turning it back on resumes at the same speed and position. Clock, weather, and
+news links remain available. The ticker defaults to on when the app restarts.
 
 The settings page also includes a weather ZIP code field. Enter a US ZIP code
 or ZIP+4 and click **Save ZIP code**. It saves `WEATHER_LOCATION` in your local

@@ -9,10 +9,12 @@ import socket
 class ser():
      
     def __init__(self):
-        self.app = Flask(__name__, template_folder=str(PROJECT_DIR / "Templates"))
+        self.app = Flask(__name__, template_folder=str(PROJECT_DIR / "Templates"),
+                         static_folder=str(PROJECT_DIR / "static"))
         self.ip = os.getenv("WEB_HOST", "127.0.0.1")
         self.sliderValue = 100
         self.tickerSpeed = 18
+        self.tickerEnabled = True
         self.weatherLocation = os.getenv("WEATHER_LOCATION", "08865")
         self.locationLock = threading.Lock()
         self.newsLock = threading.Lock()
@@ -22,6 +24,8 @@ class ser():
                               self.setWeatherLocation, methods=['POST'])
         self.app.add_url_rule('/news', 'news', self.getNews, methods=['GET'])
         self.app.add_url_rule('/ticker-speed', 'ticker_speed', self.setTickerSpeed,
+                              methods=['GET', 'POST'])
+        self.app.add_url_rule('/ticker-enabled', 'ticker_enabled', self.setTickerEnabled,
                               methods=['GET', 'POST'])
         # threading.Thread(target=self.start()).start()
         # self.start()
@@ -36,11 +40,22 @@ class ser():
             if request.method == 'POST':
                 self.sliderValue = max(0, min(100, int(request.get_json()['out'])))
                 return jsonify(out=self.sliderValue)
-            if request.method == 'GET':
-                print("this is a test") 
-            return render_template("index.html",ip = self.ip, sliderValue = self.sliderValue,
-                                   weatherLocation=self.weatherLocation, news=self.newsSnapshot(),
-                                   tickerSpeed=self.tickerSpeed)
+            return render_template("index.html", initial_state=dict(
+                ip=self.ip, brightness=self.sliderValue, weatherLocation=self.weatherLocation,
+                news=self.newsSnapshot(), tickerSpeed=self.tickerSpeed,
+                tickerEnabled=self.tickerEnabled))
+
+    def getTickerEnabled(self):
+        return self.tickerEnabled
+
+    def setTickerEnabled(self):
+        if request.method == 'POST':
+            data = request.get_json(silent=True)
+            enabled = data.get('enabled') if isinstance(data, dict) else None
+            if type(enabled) is not bool:
+                return jsonify(error="Enabled must be true or false."), 400
+            self.tickerEnabled = enabled
+        return jsonify(enabled=self.tickerEnabled)
 
     def getTickerSpeed(self):
         return self.tickerSpeed

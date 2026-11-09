@@ -6,7 +6,7 @@ settings.toml.bak
 run.log
 .env
 .env.*
-
+.pip-cache/
 # Python environments and caches
 venv/
 .venv/
@@ -25,3 +25,9 @@ boot_out.txt
 System Volume Information/
 Thumbs.db
 .DS_Store
+
+# Frontend dependencies (built static/ui assets are included for the Pi)
+node_modules/
+.npm-cache/
+.pip-cache/
+.deploy/

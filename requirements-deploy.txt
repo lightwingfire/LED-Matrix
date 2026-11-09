@@ -1,0 +1,3 @@
+# Local deployment tools; do not install these on the board.
+paramiko>=3,<5
+tomli>=2; python_version < "3.11"

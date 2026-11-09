@@ -1,0 +1,18 @@
+{
+  "name": "led-matrix-controls",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build --configLoader native",
+    "dev": "vite build --watch --configLoader native",
+    "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./build-deploy.ps1"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^7.2.0"
+  }
+}

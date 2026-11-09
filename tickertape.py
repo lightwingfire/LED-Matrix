@@ -101,8 +101,6 @@ class TickerTapeManager:
         self.scrollSpeed = speed
 
     def setBrightness(self,br):
-        if self.isHidden:
-            return
         self.brightness = br
         for words in self.queque:
             words.setBrightness(br)
@@ -111,10 +109,13 @@ class TickerTapeManager:
         return self.brightness
 
     def setHidden(self):
-        self.brightness = 0
-        for words in self.queque:
-            words.setBrightness(self.brightness)
-        self.isHidden = True
+        self.setEnabled(False)
+
+    def setEnabled(self, enabled):
+        hidden = not enabled
+        if self.isHidden != hidden:
+            self.isHidden = hidden
+            self.change = True
 
     async def refreshInfo(self):
         await self.getNews()
@@ -211,6 +212,8 @@ class TickerTapeManager:
         return text
 
     def update(self,dt):
+        if self.isHidden:
+            return
         #removes parts that have scrolled off screen
         # quequeNum = 0
         # for words in self.queque:
@@ -272,6 +275,8 @@ class TickerTapeManager:
         # print(len(self.queque))
     
     def render(self, canvas=None):
+        if self.isHidden:
+            return
         for words in self.queque:
             words.render(canvas)
 

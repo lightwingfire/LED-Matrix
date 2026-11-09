@@ -107,6 +107,7 @@ async def main(matrix, canvas):
         dt = frame_start - start_time
         start_time = frame_start
         tt.setSpeed(webpage.getTickerSpeed())
+        tt.setEnabled(webpage.getTickerEnabled())
         updateDeltaTime()
         if refresh_task.done() and wM.location != webpage.getWeatherLocation():
             wM.location = webpage.getWeatherLocation()
