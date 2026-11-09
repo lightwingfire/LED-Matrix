@@ -1,11 +1,24 @@
-.vscode
+# Local configuration and credentials
 settings.toml
 settings.toml.bak
-tickertape.py
-timemanager.py.bak
+.env
+.env.*
+
+# Python environments and caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+
+# Editor settings and downloaded original project
+.vscode/
+/LED-Matrix-main/
+
+# Device and operating system files
 boot_out.txt
 .Trashes
 .metadata_never_index
 .fseventsd
-System Volume Information
-t.py
+System Volume Information/
+Thumbs.db
+.DS_Store
