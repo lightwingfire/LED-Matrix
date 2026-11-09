@@ -264,7 +264,6 @@ class weatherManager:
         self.weatherToday = weatherToday(canvas)
         self.brightnessV = 1.0
 
-        self.getWeather()
 
     async def refreshInfo(self):
         await self.getWeather()
@@ -273,18 +272,18 @@ class weatherManager:
         # api_key = os.getenv("WEATHERAPI_KEY")
         # location = os.getenv("WEATHER_LOCATION")
         api_key = os.environ["WEATHERAPI_KEY"]
-        location = "08865"
+        location = os.getenv("WEATHER_LOCATION", "08865")
 
-        url = f'http://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location}&days=5&aqi=no&alerts=no'
+        url = f'https://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location}&days=5&aqi=no&alerts=no'
 
 
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
                     async with session.get(url) as response:
                         l= await response.json()
 
 
 
-        print(url)
+        print("Weather forecast received")
         # try:
         #     l = requests.get(url,timeout=10)
             

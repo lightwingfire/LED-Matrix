@@ -2,6 +2,12 @@
 
 import asyncio
 import time
+import os
+from config import PROJECT_DIR, load_settings
+
+# Fonts, sprites, templates, and emulator configuration live beside this file.
+os.chdir(PROJECT_DIR)
+load_settings()
 try:
     from RGBMatrixEmulator import RGBMatrix, RGBMatrixOptions
 except:
@@ -14,32 +20,29 @@ from clock import ClockFace
 from weather import weatherManager
 from tickertape import ticktape, TickerTapeManager
 
-async def main():
-    webpage = ser()
-    threading.Thread(target=webpage.start).start()
-
-    # GPIOPin = 2
-    # GPIO.setmode(GPIO.BCM)  
-    # GPIO.setup(GPIOPin, GPIO.OUT)
-    # GPIO.output(GPIOPin, GPIO.LOW)
-    # buttonState = GPIO.input(GPIOPin)
-
-    # webpage.start()
-    print ("hello World!")
+def create_display():
+    # The emulator starts its own event loop; initialize it before asyncio.run.
     options = RGBMatrixOptions()
     options.gpio_slowdown = 2
     options.cols = 128
+    if hasattr(options, "browser"):
+        options.browser.port = int(os.getenv("EMULATOR_PORT", options.browser.port))
     options.show_refresh_rate = 60
     # options.pwm_bits = 11
     # options.pwm_lsb_nanoseconds = 300
     matrix = RGBMatrix(options = options)
 
     canvas = matrix.CreateFrameCanvas()
+    return matrix, canvas
+
+
+async def main(matrix, canvas):
+    webpage = ser()
+    threading.Thread(target=webpage.start, daemon=True).start()
 
     clock = ClockFace(4,16,canvas)
     wM = weatherManager(canvas)
     tt = TickerTapeManager(canvas)
-    asyncio.create_task(tt.refreshInfo())
 
     change = 0
 
@@ -58,9 +61,17 @@ async def main():
         tt.update(dt)
 
     async def refreshAPI():
-        
-        asyncio.create_task(tt.refreshInfo())
-        asyncio.create_task(wM.refreshInfo())
+        async def refresh(name, callback):
+            try:
+                await callback()
+            except Exception as error:
+                # Request exceptions can include URLs containing API keys.
+                print(f"{name} refresh failed ({type(error).__name__}); keeping existing display.")
+
+        await asyncio.gather(
+            refresh("News", tt.refreshInfo),
+            refresh("Weather", wM.refreshInfo),
+        )
 
         # try:
         #     tt.refreshInfo()
@@ -86,11 +97,12 @@ async def main():
         
         return False
 
+    refresh_task = asyncio.create_task(refreshAPI())
     while True:
-        await asyncio.sleep((1.0 / 240) - dt)
+        frame_start = time.monotonic()
         updateDeltaTime()
-        if clock.newHour():
-            await refreshAPI()
+        if clock.newHour() and refresh_task.done():
+            refresh_task = asyncio.create_task(refreshAPI())
 
         if checkForChange():
             canvas.Clear()
@@ -111,14 +123,17 @@ async def main():
         start_time = current_time
 
         #adjusts sleep time to account for fluxuations in time
-        if dt < 1.0 / 240:
-            time.sleep((1.0 / 240) - dt)
+        await asyncio.sleep(max(0, 1.0 / 60 - (time.monotonic() - frame_start)))
         
 
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    try:
+        matrix, canvas = create_display()
+        asyncio.run(main(matrix, canvas))
+    except KeyboardInterrupt:
+        pass
     
   
     

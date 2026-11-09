@@ -32,9 +32,12 @@ class ticktape:
         # self.numOfTitles = len(self.newsJson["articles"])
 
     def get_ip_address(self):
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        return s.getsockname()[0]
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
+                s.connect(("8.8.8.8", 80))
+                return s.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
 
     def changed(self):
         change = self.change
@@ -148,12 +151,12 @@ class TickerTapeManager:
 
         # try:
         print("getting news stories")
-        async with aiohttp.ClientSession() as session:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=15)) as session:
                 async with session.get(url) as response:
                     articles = await response.json()
         # articles = requests.get(url,allow_redirects=True,timeout=5)
         
-        print(url)
+        print("News response received")
         try:
             if len(articles["articles"])  == 0:
                 issueJson = [articles["status"],articles["code"],articles["message"]]
