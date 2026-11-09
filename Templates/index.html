@@ -67,6 +67,15 @@
   
   <h1 style="text-align:center">LED Board Settings</h1>
   <h5 style="text-align:center">{{ip}}</h5>
+
+    <form id="weatherLocationForm">
+      <label for="weatherZipcode">Weather ZIP code</label>
+      <input id="weatherZipcode" name="zipcode" type="text" inputmode="numeric"
+             autocomplete="postal-code" pattern="[0-9]{5}(-[0-9]{4})?"
+             maxlength="10" value="{{ weatherLocation }}" placeholder="08865" required>
+      <button id="saveWeatherZipcode" type="submit">Save ZIP code</button>
+      <p id="weatherLocationStatus" role="status" aria-live="polite"></p>
+    </form>
   
     <div class="slidecontainer">
       <p>Current Brightness Value: <span id="brightnessValue"></span></p>
@@ -86,6 +95,30 @@
     </div>
   
   <script>
+  document.getElementById('weatherLocationForm').addEventListener('submit', async function(event) {
+    event.preventDefault();
+    const button = document.getElementById('saveWeatherZipcode');
+    const status = document.getElementById('weatherLocationStatus');
+    const input = document.getElementById('weatherZipcode');
+    button.disabled = true;
+    status.textContent = 'Saving ZIP code…';
+    try {
+      const response = await fetch('/weather-location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ zipcode: input.value.trim() })
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Could not save the ZIP code.');
+      input.value = data.zipcode;
+      status.textContent = 'ZIP code saved. Refreshing weather for ' + data.zipcode + '…';
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
   var slider = document.getElementById("myRange");
   var brightnessOutput = document.getElementById("brightnessValue");
   var doTimedBrightness = document.getElementById("doTimedBrightness");

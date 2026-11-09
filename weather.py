@@ -249,6 +249,7 @@ import os
 import math
 class weatherManager:
     def __init__(self,canvas):
+        self.location = os.getenv("WEATHER_LOCATION", "08865")
         self.weather0 = weather(70,2,canvas)
         self.weather1 = weather(85,2,canvas)
         self.weather2 = weather(100,2,canvas)
@@ -272,7 +273,7 @@ class weatherManager:
         # api_key = os.getenv("WEATHERAPI_KEY")
         # location = os.getenv("WEATHER_LOCATION")
         api_key = os.environ["WEATHERAPI_KEY"]
-        location = os.getenv("WEATHER_LOCATION", "08865")
+        location = self.location
 
         url = f'https://api.weatherapi.com/v1/forecast.json?key={api_key}&q={location}&days=5&aqi=no&alerts=no'
 

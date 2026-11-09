@@ -60,7 +60,7 @@ async def main(matrix, canvas):
         wM.update(dt)
         tt.update(dt)
 
-    async def refreshAPI():
+    async def refreshAPI(weather_only=False):
         async def refresh(name, callback):
             try:
                 await callback()
@@ -68,10 +68,10 @@ async def main(matrix, canvas):
                 # Request exceptions can include URLs containing API keys.
                 print(f"{name} refresh failed ({type(error).__name__}); keeping existing display.")
 
-        await asyncio.gather(
-            refresh("News", tt.refreshInfo),
-            refresh("Weather", wM.refreshInfo),
-        )
+        jobs = [refresh("Weather", wM.refreshInfo)]
+        if not weather_only:
+            jobs.append(refresh("News", tt.refreshInfo))
+        await asyncio.gather(*jobs)
 
         # try:
         #     tt.refreshInfo()
@@ -101,7 +101,10 @@ async def main(matrix, canvas):
     while True:
         frame_start = time.monotonic()
         updateDeltaTime()
-        if clock.newHour() and refresh_task.done():
+        if refresh_task.done() and wM.location != webpage.getWeatherLocation():
+            wM.location = webpage.getWeatherLocation()
+            refresh_task = asyncio.create_task(refreshAPI(weather_only=True))
+        elif clock.newHour() and refresh_task.done():
             refresh_task = asyncio.create_task(refreshAPI())
 
         if checkForChange():

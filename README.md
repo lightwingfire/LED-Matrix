@@ -23,6 +23,11 @@ py -3.11 -m venv .venv
 Open http://localhost:8888 for the matrix and http://127.0.0.1:5000
 for the brightness slider. Press Ctrl+C in PowerShell to stop.
 
+The settings page also includes a weather ZIP code field. Enter a US ZIP code
+or ZIP+4 and click **Save ZIP code**. It saves `WEATHER_LOCATION` in your local
+`settings.toml` and refreshes the forecast automatically. If a refresh is already
+running, the new ZIP code is fetched when that request finishes.
+
 ## Local settings
 
 The app automatically reads `settings.toml` beside `main.py`. This file is

@@ -1,7 +1,9 @@
 # import the Flask library
 from flask import Flask, render_template, request, jsonify
 import os
-from config import PROJECT_DIR
+import re
+import threading
+from config import PROJECT_DIR, save_weather_location
 import socket
 class ser():
      
@@ -9,7 +11,11 @@ class ser():
         self.app = Flask(__name__, template_folder=str(PROJECT_DIR / "Templates"))
         self.ip = os.getenv("WEB_HOST", "127.0.0.1")
         self.sliderValue = 100
+        self.weatherLocation = os.getenv("WEATHER_LOCATION", "08865")
+        self.locationLock = threading.Lock()
         self.app.add_url_rule('/','page',self.page, methods=['GET', 'POST'])
+        self.app.add_url_rule('/weather-location', 'weather_location',
+                              self.setWeatherLocation, methods=['POST'])
         # threading.Thread(target=self.start()).start()
         # self.start()
 
@@ -25,7 +31,27 @@ class ser():
                 return jsonify(out=self.sliderValue)
             if request.method == 'GET':
                 print("this is a test") 
-            return render_template("index.html",ip = self.ip, sliderValue = self.sliderValue)
+            return render_template("index.html",ip = self.ip, sliderValue = self.sliderValue,
+                                   weatherLocation=self.weatherLocation)
+
+    def getWeatherLocation(self):
+        return self.weatherLocation
+
+    def setWeatherLocation(self):
+        data = request.get_json(silent=True)
+        location = data.get("zipcode") if isinstance(data, dict) else None
+        if not isinstance(location, str):
+            return jsonify(error="Enter a five-digit ZIP code, such as 08865."), 400
+        location = location.strip()
+        if not re.fullmatch(r"[0-9]{5}(?:-[0-9]{4})?", location):
+            return jsonify(error="Enter a five-digit ZIP code or ZIP+4."), 400
+        with self.locationLock:
+            try:
+                save_weather_location(location)
+            except OSError:
+                return jsonify(error="Could not save the ZIP code. Check settings.toml permissions."), 500
+            self.weatherLocation = location
+        return jsonify(zipcode=location)
             
     def getSlider(self):
         if self.sliderValue <1:

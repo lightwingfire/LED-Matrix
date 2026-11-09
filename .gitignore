@@ -1,6 +1,7 @@
 # Local configuration and credentials
 settings.toml
 settings.toml.bak
+.weather-settings-*.tmp
 .env
 .env.*
 
