@@ -17,7 +17,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 APP_FILES = (
     'main.py', 'ser.py', 'config.py', 'clock.py', 'weather.py', 'tickertape.py',
-    'drawGraphics.py', 'run.sh', 'Templates/index.html', 'weather_conditions.json',
+    'drawGraphics.py', 'aquarium.py', 'run.sh', 'Templates/index.html', 'weather_conditions.json',
 )
 
 
@@ -224,7 +224,16 @@ try:
     deadline = time.monotonic() + 10
     while any(running(pid) for pid in pids):
         if time.monotonic() > deadline:
-            raise RuntimeError('Existing app did not stop.')
+            # A native-driver deadlock cannot handle Python's SIGTERM handler.
+            for pid in pids:
+                if running(pid):
+                    os.kill(pid, signal.SIGKILL)
+            deadline = time.monotonic() + 5
+            while any(running(pid) for pid in pids):
+                if time.monotonic() > deadline:
+                    raise RuntimeError('Existing app did not stop.')
+                time.sleep(.2)
+            break
         time.sleep(.2)
     phase = 'installing files'
     for name in files:
@@ -243,10 +252,16 @@ try:
     while True:
         try:
             base = 'http://127.0.0.1:%s/' % options['web_port']
+            with urllib.request.urlopen(base + 'health', timeout=2) as response:
+                if json.load(response).get('displayRunning') is not True:
+                    raise ValueError('Display is not advancing.')
             with urllib.request.urlopen(base + 'ticker-enabled', timeout=2) as response:
                 enabled = json.load(response)['enabled']
             if type(enabled) is not bool:
                 raise ValueError('Invalid toggle response.')
+            with urllib.request.urlopen(base + 'fish-mode', timeout=2) as response:
+                if type(json.load(response)['enabled']) is not bool:
+                    raise ValueError('Invalid FISH mode response.')
             for name, digest in expected.items():
                 with urllib.request.urlopen(base + name, timeout=2) as response:
                     if hashlib.sha256(response.read()).digest() != digest:
@@ -298,7 +313,7 @@ def deploy(client, project, package, web_port):
         print('Update failed. Previous files and startup were restored where possible.' if result.get('rollback_attempted')
               else 'Update failed before the installed app was changed.', flush=True)
         raise RuntimeError('Board deployment failed.')
-    print('Deployment complete. App restarted; website assets and ticker API verified. Backup saved on board.', flush=True)
+    print('Deployment complete. Display frames, website assets, and control APIs verified. Backup saved on board.', flush=True)
 
 
 def main():

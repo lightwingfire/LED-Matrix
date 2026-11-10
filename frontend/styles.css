@@ -28,3 +28,14 @@
 .toggle-switch[aria-checked=true] .toggle-track > span { transform: translateX(16px); background: #182212; }
 .toggle-status { flex-basis: 100%; margin: 0; color: #a4b0a9; font-size: 11px; }
 .toggle-status:empty { display: none; }
+
+.display-mode { display: flex; align-items: center; gap: 18px; padding: 20px 25px; margin-bottom: 24px; }
+.display-mode p { margin: 0; font-size: 12px; color: #a4b0a9; }
+.fish-button { min-width: 88px; }
+.fish-button[aria-pressed=false] { background: transparent; border: 1px solid #b8ef80; color: #b8ef80; }
+.fish-button[aria-pressed=true] { box-shadow: 0 0 0 2px #111716, 0 0 0 3px #b8ef80; }
+@media (max-width: 720px) { .display-mode { padding: 20px; align-items: flex-start; } }
+
+.aquarium-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 20px 25px; margin-bottom: 24px; }
+.aquarium-controls p { margin: 0; color: #a4b0a9; font-size: 12px; }
+.aquarium-controls p:empty { display: none; }

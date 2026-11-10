@@ -86,6 +86,28 @@ The **Ticker tape** toggle in **News** hides the ticker and stops its movement.
 Turning it back on resumes at the same speed and position. Clock, weather, and
 news links remain available. The ticker defaults to on when the app restarts.
 
+Press **FISH** to enter aquarium mode. This displays a blue-to-black water
+gradient with diagonal light bands that drift right at different speeds,
+wrap around, and fade in and out independently,
+and pauses the clock, weather, and ticker display. The brightness
+slider also controls the aquarium. Press **FISH** again to restore the other
+elements with their existing settings.
+The app starts with FISH mode off.
+
+The fish chooses random destinations above the sand, turns toward them in 3D,
+and swims at varying speeds. Its parts keep their fixed drawing order and
+delayed head-to-tail motion. Turns ease in and out, with each body section
+following more slowly toward the tailfin while remaining connected.
+
+While FISH mode is on, **Generate new sand** creates a new sand profile using
+the current sand settings. It stays fixed between frames and keeps neighboring
+columns within one pixel of each other.
+
+Sand generation uses `roughnessX` for the number of columns between height-change
+attempts and `roughnessY` for the percentage chance of a one-pixel height change
+at each attempt. Defaults are `roughnessX=4` and `roughnessY=50`.
+Setting `roughnessY=0` makes the sand flat; `100` changes height at every attempt.
+
 The settings page also includes a weather ZIP code field. Enter a US ZIP code
 or ZIP+4 and click **Save ZIP code**. It saves `WEATHER_LOCATION` in your local
 `settings.toml` and refreshes the forecast automatically. If a refresh is already
@@ -139,3 +161,8 @@ drops privileges, so saving a ZIP code works without making the source writable.
 `LED_SETTINGS_FILE` can select another settings file. SSH credentials are not
 copied to the Pi. Driver refresh-rate logging is off by default; set
 `SHOW_REFRESH_RATE=1` when running Python directly to enable it for diagnostics.
+
+The native driver uses software pulse timing by default to avoid hardware PWM
+waits that can freeze display updates and web controls. Set `HARDWARE_PULSING=1`
+to opt into hardware timing. `/health` returns success only while display frames
+are advancing; deployment verifies this as well as the website assets.

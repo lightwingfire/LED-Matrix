@@ -19,12 +19,16 @@ from PIL import Image
 from clock import ClockFace
 from weather import weatherManager
 from tickertape import ticktape, TickerTapeManager
+from aquarium import Aquarium
 
 def create_display():
     # The emulator starts its own event loop; initialize it before asyncio.run.
     options = RGBMatrixOptions()
     options.gpio_slowdown = 2
     options.cols = 128
+    if hasattr(options, "disable_hardware_pulsing"):
+        # Avoid indefinite waits in the Pi's hardware PWM pulse generator.
+        options.disable_hardware_pulsing = os.getenv("HARDWARE_PULSING", "0") != "1"
     if hasattr(options, "browser"):
         options.browser.port = int(os.getenv("EMULATOR_PORT", options.browser.port))
     options.show_refresh_rate = os.getenv("SHOW_REFRESH_RATE", "0") == "1"
@@ -43,12 +47,14 @@ async def main(matrix, canvas):
     clock = ClockFace(4,16,canvas)
     wM = weatherManager(canvas)
     tt = TickerTapeManager(canvas)
+    aquarium = Aquarium(canvas)
     webpage.setNews(tt.newsJson, updated_at=tt.newsUpdatedAt, cached=tt.newsCached)
 
     change = 0
 
     start_time = time.monotonic()
     dt = 0
+    previous_fish_mode = False
 
     def updateDeltaTime():
         clock.updateFace()
@@ -106,6 +112,20 @@ async def main(matrix, canvas):
         frame_start = time.monotonic()
         dt = frame_start - start_time
         start_time = frame_start
+        fish_mode = webpage.getFishMode()
+        mode_changed = fish_mode != previous_fish_mode
+        previous_fish_mode = fish_mode
+        if fish_mode:
+            if webpage.consumeSandRequest():
+                aquarium.regenerateSand()
+            aquarium.setBrightness(webpage.getSlider())
+            aquarium.update(dt)
+            canvas.Clear()
+            aquarium.render(canvas)
+            canvas = matrix.SwapOnVSync(canvas)
+            webpage.reportFrame()
+            await asyncio.sleep(max(0, 1.0 / 60 - (time.monotonic() - frame_start)))
+            continue
         tt.setSpeed(webpage.getTickerSpeed())
         tt.setEnabled(webpage.getTickerEnabled())
         updateDeltaTime()
@@ -115,7 +135,7 @@ async def main(matrix, canvas):
         elif clock.newHour() and refresh_task.done():
             refresh_task = asyncio.create_task(refreshAPI())
 
-        if checkForChange():
+        if mode_changed or checkForChange():
             canvas.Clear()
 
             if change != webpage.getSlider():
@@ -129,6 +149,7 @@ async def main(matrix, canvas):
             
 
         canvas = matrix.SwapOnVSync(canvas)
+        webpage.reportFrame()
 
         #adjusts sleep time to account for fluxuations in time
         await asyncio.sleep(max(0, 1.0 / 60 - (time.monotonic() - frame_start)))

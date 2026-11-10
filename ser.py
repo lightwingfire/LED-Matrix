@@ -3,6 +3,7 @@ from flask import Flask, render_template, request, jsonify
 import os
 import re
 import threading
+import time
 from urllib.parse import urlsplit
 from config import PROJECT_DIR, save_weather_location
 import socket
@@ -15,6 +16,10 @@ class ser():
         self.sliderValue = 100
         self.tickerSpeed = 18
         self.tickerEnabled = True
+        self.fishMode = False
+        self.lastFrame = None
+        self.sandLock = threading.Lock()
+        self.sandRequested = False
         self.weatherLocation = os.getenv("WEATHER_LOCATION", "08865")
         self.locationLock = threading.Lock()
         self.newsLock = threading.Lock()
@@ -27,6 +32,11 @@ class ser():
                               methods=['GET', 'POST'])
         self.app.add_url_rule('/ticker-enabled', 'ticker_enabled', self.setTickerEnabled,
                               methods=['GET', 'POST'])
+        self.app.add_url_rule('/fish-mode', 'fish_mode', self.setFishMode,
+                              methods=['GET', 'POST'])
+        self.app.add_url_rule('/health', 'health', self.getHealth, methods=['GET'])
+        self.app.add_url_rule('/aquarium/sand', 'generate_sand', self.requestSand,
+                              methods=['POST'])
         # threading.Thread(target=self.start()).start()
         # self.start()
 
@@ -43,7 +53,42 @@ class ser():
             return render_template("index.html", initial_state=dict(
                 ip=self.ip, brightness=self.sliderValue, weatherLocation=self.weatherLocation,
                 news=self.newsSnapshot(), tickerSpeed=self.tickerSpeed,
-                tickerEnabled=self.tickerEnabled))
+                tickerEnabled=self.tickerEnabled, fishMode=self.fishMode))
+
+    def getFishMode(self):
+        return self.fishMode
+
+    def reportFrame(self):
+        self.lastFrame = time.monotonic()
+
+    def getHealth(self):
+        last_frame = self.lastFrame
+        running = last_frame is not None and time.monotonic() - last_frame < 3
+        response = jsonify(displayRunning=running)
+        response.headers['Cache-Control'] = 'no-store'
+        return response, 200 if running else 503
+
+    def requestSand(self):
+        if not self.fishMode:
+            return jsonify(error="Turn on FISH mode first."), 409
+        with self.sandLock:
+            self.sandRequested = True
+        return jsonify(queued=True), 202
+
+    def consumeSandRequest(self):
+        with self.sandLock:
+            requested = self.sandRequested
+            self.sandRequested = False
+        return requested
+
+    def setFishMode(self):
+        if request.method == 'POST':
+            data = request.get_json(silent=True)
+            enabled = data.get('enabled') if isinstance(data, dict) else None
+            if type(enabled) is not bool:
+                return jsonify(error="Enabled must be true or false."), 400
+            self.fishMode = enabled
+        return jsonify(enabled=self.fishMode)
 
     def getTickerEnabled(self):
         return self.tickerEnabled

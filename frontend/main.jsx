@@ -131,6 +131,30 @@ function App() {
   const [tickerEnabled, setTickerEnabled] = useState(initial.tickerEnabled);
   const [toggling, setToggling] = useState(false);
   const [toggleStatus, setToggleStatus] = useState('');
+  const [fishMode, setFishMode] = useState(initial.fishMode);
+  const [switchingMode, setSwitchingMode] = useState(false);
+  const [modeError, setModeError] = useState('');
+  const [generatingSand, setGeneratingSand] = useState(false);
+  const [sandStatus, setSandStatus] = useState('');
+  async function generateSand() {
+    setGeneratingSand(true);
+    setSandStatus('');
+    try {
+      await post('/aquarium/sand', {});
+      setSandStatus('New sand requested.');
+    } catch (error) { setSandStatus(error.message); }
+    finally { setGeneratingSand(false); }
+  }
+  async function toggleFishMode() {
+    setSwitchingMode(true);
+    setModeError('');
+    try {
+      const data = await post('/fish-mode', { enabled: !fishMode });
+      setFishMode(data.enabled);
+      setSandStatus('');
+    } catch (error) { setModeError(error.message); }
+    finally { setSwitchingMode(false); }
+  }
   async function toggleTicker() {
     setToggling(true);
     setToggleStatus('');
@@ -144,6 +168,18 @@ function App() {
   return <div className="app-shell">
     <header className="site-header"><a className="brand" href="/" aria-label="LED Matrix home"><span className="matrix-mark" aria-hidden="true">{Array.from({ length: 9 }, (_, i) => <i key={i} />)}</span>LED<span> / </span>MATRIX</a><span className="device-address">{initial.ip}</span></header>
     <main><div className="page-heading"><h1>LED Matrix Settings</h1><div className="hardware-tag">128 × 32 RGB MATRIX</div></div>
+      <section className="card display-mode" aria-label="Display mode">
+        <button type="button" className="primary-button fish-button" aria-pressed={fishMode}
+          disabled={switchingMode || generatingSand} onClick={toggleFishMode}>FISH</button>
+        <p role="status">{modeError || (switchingMode ? 'Applying…' : fishMode
+          ? 'FISH mode on. Clock, weather, and ticker off. Press FISH to restore.'
+          : 'FISH mode off.')}</p>
+      </section>
+      {fishMode && <section className="card aquarium-controls" aria-label="Aquarium controls">
+        <button type="button" className="primary-button" disabled={generatingSand || switchingMode}
+          onClick={generateSand}>{generatingSand ? 'Generating…' : 'Generate new sand'}</button>
+        <p role="status">{sandStatus}</p>
+      </section>}
       <div className="controls-grid"><SliderCard id="brightness" title="Brightness" setting={brightness} min={1} unit="%" low="Dim" high="Bright" />
         <WeatherCard /></div>
       <p className="session-note">Brightness resets when the app restarts. Automatic brightness scheduling is not available.</p>
