@@ -17,6 +17,75 @@ class Canvas:
 
 
 class AquariumTests(unittest.TestCase):
+    def test_can_delete_all_fish_and_add_again(self):
+        aquarium = Aquarium(Canvas())
+        first = aquarium.fish
+        second = aquarium.addFish()
+        self.assertTrue(aquarium.deleteFish(first.id))
+        self.assertIs(aquarium.fish, second)
+        self.assertEqual([row['id'] for row in aquarium.fishStats()], [second.id])
+        self.assertTrue(aquarium.deleteFish(second.id))
+        self.assertIsNone(aquarium.fish)
+        self.assertEqual(aquarium.fishStats(), [])
+        aquarium.update(.2)
+        aquarium.render()
+        self.assertEqual(first.time, 0)
+        self.assertEqual(second.time, 0)
+        self.assertFalse(aquarium.deleteFish(second.id))
+        self.assertFalse(aquarium.regenerateFish(second.id))
+        self.assertFalse(aquarium.regenerateFish())
+        third = aquarium.addFish()
+        self.assertEqual(third.id, 3)
+        self.assertIs(aquarium.fish, third)
+        self.assertTrue(third.wandering)
+
+    def test_adding_fish_preserves_existing_fish_and_applies_global_settings(self):
+        aquarium = Aquarium(Canvas())
+        first = aquarium.fish
+        original_seed = first.seed
+        aquarium.setBrightness(.4)
+        aquarium.setShadowMode(True)
+        second = aquarium.addFish()
+        third = aquarium.addFish()
+        self.assertEqual([fish.id for fish in aquarium.fishes], [1, 2, 3])
+        self.assertIs(aquarium.fishes[0], first)
+        self.assertEqual(first.seed, original_seed)
+        self.assertTrue(all(fish.shadowMode and fish.getBrightness() == .4 for fish in aquarium.fishes))
+        aquarium.update(.2)
+        self.assertTrue(all(fish.time > 0 for fish in aquarium.fishes))
+        rows = aquarium.fishStats()
+        self.assertEqual([row['seed'] for row in rows], [fish.seed for fish in aquarium.fishes])
+        self.assertEqual(rows[1]['speed'], round(second.wanderSpeed, 1))
+        self.assertNotEqual(second.id, third.id)
+
+    def test_regeneration_targets_only_the_requested_fish(self):
+        aquarium = Aquarium(Canvas())
+        second = aquarium.addFish()
+        first_shape = (aquarium.fish.tailfin, aquarium.fish.tail, aquarium.fish.body,
+                       aquarium.fish.head, aquarium.fish.seed, aquarium.fish.colors.copy())
+        build = second.buildFish
+        with patch.object(second, 'buildFish', side_effect=lambda: build(seed=1234)):
+            aquarium.regenerateFish(second.id)
+        self.assertEqual(second.seed, 1234)
+        self.assertEqual((aquarium.fish.tailfin, aquarium.fish.tail, aquarium.fish.body,
+                          aquarium.fish.head, aquarium.fish.seed, aquarium.fish.colors), first_shape)
+        self.assertEqual(second.id, 2)
+
+    def test_regenerating_fish_preserves_background_and_brightness(self):
+        aquarium = Aquarium(Canvas())
+        aquarium.setBrightness(.4)
+        original_sand, original_water = aquarium.sand, aquarium.water
+        aquarium.fish.setDirection((-1, 0, 0))
+        aquarium.regenerateFish()
+        self.assertIs(aquarium.sand, original_sand)
+        self.assertIs(aquarium.water, original_water)
+        self.assertEqual(aquarium.fish.getBrightness(), .4)
+        self.assertAlmostEqual(aquarium.fish.direction[0], -1)
+        self.assertTrue(aquarium.fish.wandering)
+        self.assertEqual(aquarium.fish.tailfin[0][2:], aquarium.fish.tailfin[1][2:])
+        left, top, right, bottom = aquarium.fish.swimBounds
+        self.assertTrue(left <= aquarium.fish.x <= right and top <= aquarium.fish.y <= bottom)
+
     def test_swimming_fish_stays_above_sand_and_inside_display(self):
         canvas = Canvas()
         aquarium = Aquarium(canvas)
@@ -33,13 +102,14 @@ class AquariumTests(unittest.TestCase):
         canvas = Canvas()
         aquarium = Aquarium(canvas)
         fish = aquarium.fish
-        self.assertEqual(fish.x * 2 + fish.width, canvas.width)
+        self.assertLessEqual(abs(fish.x * 2 + fish.width - canvas.width), 1)
         self.assertEqual(fish.y * 2 + fish.height, canvas.height)
         aquarium.setBrightness(.5)
         aquarium.render()
         self.assertEqual(fish.getBrightness(), .5)
-        self.assertEqual(canvas.pixels[canvas.width // 2, canvas.height // 2],
-                         tuple(round(channel * .5) for channel in fish.color))
+        self.assertIn(canvas.pixels[canvas.width // 2, canvas.height // 2],
+                      {tuple(round(channel * .5) for channel in color)
+                       for color in fish.colors.values()})
 
     def test_water_bands_slant_up_to_the_right(self):
         canvas = Canvas()
@@ -226,7 +296,7 @@ class AquariumTests(unittest.TestCase):
         self.assertEqual(set(aquarium.sand), set(sand))
 
     def test_regeneration_changes_sand_and_preserves_settings(self):
-        with patch('aquarium.Random', side_effect=[Random(0), Random(1)]):
+        with patch('aquarium.Random', side_effect=[Random(17), Random(0), Random(1)]):
             aquarium = Aquarium(Canvas(), maxheight=6, roughnessX=4, roughnessY=50, color=(220, 180, 100))
             previous = aquarium.sand
             aquarium.setBrightness(.5)

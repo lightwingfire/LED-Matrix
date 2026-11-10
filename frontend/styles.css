@@ -39,3 +39,14 @@
 .aquarium-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 20px 25px; margin-bottom: 24px; }
 .aquarium-controls p { margin: 0; color: #a4b0a9; font-size: 12px; }
 .aquarium-controls p:empty { display: none; }
+
+.fish-table-section { flex-basis: 100%; min-width: 0; padding-top: 16px; border-top: 1px solid #333e37; }
+.fish-table-section h2 { margin: 0; font-size: 20px; }
+.fish-table-scroll { overflow-x: auto; margin-top: 16px; }
+.fish-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+.fish-table th, .fish-table td { padding: 12px 10px; border-bottom: 1px solid #333e37; white-space: nowrap; }
+.fish-table thead th { color: #a4b0a9; font-weight: 500; }
+.fish-table tbody th { font-weight: 500; }
+.fish-table td:last-child { text-align: right; }
+.fish-seed { font-family: Consolas, monospace; }
+.delete-fish { margin-left: 12px; color: #ffc0ad; }

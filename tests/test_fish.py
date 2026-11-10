@@ -17,6 +17,97 @@ class Canvas:
 
 
 class FishTests(unittest.TestCase):
+    def test_shadow_mode_uses_dark_blue_and_restores_random_colors(self):
+        canvas = Canvas()
+        fish = Fish(canvas, seed=3)
+        original_colors = fish.colors.copy()
+        fish.render()
+        original_shape = set(canvas.pixels)
+        fish.setShadowMode(True)
+        fish.setBrightness(.5)
+        canvas.pixels.clear()
+        fish.render()
+        self.assertEqual(set(canvas.pixels), original_shape)
+        self.assertEqual(set(canvas.pixels.values()), {(0, 0, 20)})
+        self.assertEqual(fish.colors, original_colors)
+        fish.setShadowMode(False)
+        fish.setBrightness(1)
+        canvas.pixels.clear()
+        fish.render()
+        self.assertEqual(set(canvas.pixels.values()), set(original_colors.values()))
+
+    def test_new_fish_gets_new_colors_and_keeps_shadow_setting(self):
+        canvas = Canvas()
+        fish = Fish(canvas, seed=3)
+        original_colors = fish.colors.copy()
+        fish.setShadowMode(True)
+        fish.buildFish(seed=4)
+        self.assertNotEqual(fish.colors, original_colors)
+        self.assertEqual(len(set(fish.colors.values())), 7)
+        fish.render()
+        self.assertEqual(set(canvas.pixels.values()), {fish.shadowColor})
+
+    def test_generated_height_profile_has_one_peak_and_no_valleys(self):
+        peaks = set()
+        for seed in range(200):
+            fish = Fish(Canvas(), seed=seed)
+            heights = [part[3] for part in (fish.tail, *fish.body, fish.head)]
+            peak = heights.index(max(heights))
+            peaks.add(peak)
+            self.assertTrue(all(a <= b for a, b in zip(heights[:peak], heights[1:peak + 1])))
+            self.assertTrue(all(a >= b for a, b in zip(heights[peak:], heights[peak + 1:])))
+            self.assertTrue(all(abs(a - b) <= 2 for a, b in zip(heights, heights[1:])))
+            self.assertTrue(all(not (heights[i] < max(heights[:i]) and
+                                    heights[i] < max(heights[i + 1:]))
+                                for i in range(1, len(heights) - 1)))
+        self.assertEqual(peaks, set(range(5)))
+
+    def test_generated_parts_have_independent_spacing_variation(self):
+        overlaps = {}
+        for seed in range(80):
+            fish = Fish(Canvas(), seed=seed)
+            for joint, overlap in fish.partOverlap.items():
+                overlaps.setdefault(joint, set()).add(overlap)
+                self.assertGreaterEqual(overlap, 1)
+            chain = (fish.tail, *fish.body, fish.head)
+            for parent, child in zip(chain, chain[1:]):
+                self.assertGreater(parent[0] + parent[2], child[0])
+                self.assertGreater(child[0], parent[0])
+        self.assertTrue(all(len(values) > 1 for values in overlaps.values()))
+
+    def test_build_fish_varies_every_part_and_keeps_shapes_connected(self):
+        variations = [set() for _ in range(7)]
+        for seed in range(40):
+            canvas = Canvas()
+            fish = Fish(canvas, x=40, y=12, seed=seed)
+            parts = (*fish.tailfin, fish.tail, *fish.body, fish.head)
+            self.assertEqual(fish.tailfin[0][2:], fish.tailfin[1][2:])
+            for index, part in enumerate(parts):
+                variations[index].add(part[2:])
+            fish.render()
+            self.assertEqual(set(canvas.pixels.values()), set(fish.colors.values()))
+            remaining = set(canvas.pixels)
+            pending = [remaining.pop()]
+            while pending:
+                x, y = pending.pop()
+                for point in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
+                    if point in remaining:
+                        remaining.remove(point)
+                        pending.append(point)
+            self.assertFalse(remaining, 'Disconnected fish for seed %s' % seed)
+        self.assertTrue(all(len(sizes) > 1 for sizes in variations))
+
+    def test_build_fish_can_reproduce_a_shape_without_changing_appearance_settings(self):
+        fish = Fish(Canvas(), seed=7)
+        original = fish.tailfin, fish.tail, fish.body, fish.head
+        fish.setBrightness(.5)
+        fish.setDirection((-1, 0, 0))
+        fish.buildFish(seed=7)
+        self.assertEqual((fish.tailfin, fish.tail, fish.body, fish.head), original)
+        self.assertEqual(fish.getBrightness(), .5)
+        self.assertAlmostEqual(fish.direction[0], -1)
+        self.assertEqual(len(set(fish.colors.values())), 7)
+
     def test_random_swimming_moves_turns_and_stays_inside_bounds(self):
         fish = Fish(Canvas(), x=58, y=12)
         fish.startWandering((2, 7, 114, 14))
@@ -71,7 +162,8 @@ class FishTests(unittest.TestCase):
                 fish.setDirection(direction)
                 fish.render()
                 self.assertEqual(len({x for x, y in canvas.pixels}), fish.depth)
-                self.assertEqual(canvas.pixels[56, 16], fish.colors['head'])
+                center = round(fish.x + fish.width / 2), round(fish.y + fish.height / 2)
+                self.assertEqual(canvas.pixels[center], fish.colors['head'])
 
     def test_turnaround_passes_through_3d_heading(self):
         fish = Fish(Canvas(), x=50, y=12)

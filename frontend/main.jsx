@@ -125,6 +125,64 @@ function NewsFeed() {
   </section>;
 }
 
+function FishTable({ disabled, onBusyChange }) {
+  const [fishes, setFishes] = useState(initial.fishes || []);
+  const [pending, setPending] = useState(null);
+  const [status, setStatus] = useState('');
+  const [error, setError] = useState('');
+  useEffect(() => {
+    let active = true;
+    let timer;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch('/aquarium/fishes', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error('Could not load fish. Retrying…');
+        const data = await response.json();
+        if (active) { setFishes(data.fishes); setError(''); }
+      } catch (error) { if (active) setError(error.message); }
+      finally { if (active) timer = setTimeout(load, 1000); }
+    }
+    load();
+    return () => { active = false; controller.abort(); clearTimeout(timer); };
+  }, []);
+  async function changeFish(id = null, action = 'regenerate') {
+    setPending(id === null ? 'add' : `${action}-${id}`);
+    onBusyChange(true);
+    setStatus('');
+    try {
+      if (action === 'delete') {
+        const response = await fetch(`/aquarium/fishes/${id}`, { method: 'DELETE' });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || 'Could not delete fish.');
+        setStatus(`Deletion requested for Fish ${id}.`);
+      } else {
+        await post(id === null ? '/aquarium/fishes' : `/aquarium/fishes/${id}/regenerate`, {});
+        setStatus(id === null ? 'New fish requested.' : `New shape and colors requested for Fish ${id}.`);
+      }
+    } catch (error) { setStatus(error.message); }
+    finally { setPending(null); onBusyChange(false); }
+  }
+  return <section className="fish-table-section" aria-labelledby="fish-table-title">
+    <div className="news-header"><h2 id="fish-table-title">Fish <span className="count">{fishes.length}</span></h2>
+      <button type="button" className="primary-button" disabled={disabled || pending !== null}
+        onClick={() => changeFish()}>{pending === 'add' ? 'Adding…' : 'add fish'}</button></div>
+    <div className="fish-table-scroll"><table className="fish-table">
+      <thead><tr><th scope="col">Fish</th><th scope="col">Cruise speed (px/s)</th><th scope="col">Seed</th><th scope="col"><span className="sr-only">Actions</span></th></tr></thead>
+      <tbody>{fishes.map(fish => <tr key={fish.id}><th scope="row">Fish {fish.id}</th>
+        <td>{Number(fish.speed).toFixed(1)}</td><td className="fish-seed">{fish.seed}</td>
+        <td><button type="button" className="primary-button" disabled={disabled || pending !== null}
+          aria-label={`gen new fish ${fish.id}`} onClick={() => changeFish(fish.id)}>
+          {pending === `regenerate-${fish.id}` ? 'Generating…' : 'gen new fish'}</button>
+          <button type="button" className="text-button delete-fish" disabled={disabled || pending !== null}
+            aria-label={`delete fish ${fish.id}`} onClick={() => changeFish(fish.id, 'delete')}>
+            {pending === `delete-${fish.id}` ? 'Deleting…' : 'delete fish'}</button></td></tr>)}</tbody>
+    </table></div>
+    {fishes.length === 0 && <p>No fish. Use add fish to create one.</p>}
+    <p role="status">{error || status}</p>
+  </section>;
+}
+
 function App() {
   const brightness = useSlider(initial.brightness, '/', 'out');
   const speed = useSlider(initial.tickerSpeed, '/ticker-speed', 'speed');
@@ -136,6 +194,20 @@ function App() {
   const [modeError, setModeError] = useState('');
   const [generatingSand, setGeneratingSand] = useState(false);
   const [sandStatus, setSandStatus] = useState('');
+  const [generatingFish, setGeneratingFish] = useState(false);
+  const [shadowMode, setShadowMode] = useState(initial.shadowMode);
+  const [switchingShadow, setSwitchingShadow] = useState(false);
+  const [shadowStatus, setShadowStatus] = useState('');
+  async function toggleShadowMode() {
+    setSwitchingShadow(true);
+    setShadowStatus('');
+    try {
+      const data = await post('/aquarium/shadow', { enabled: !shadowMode });
+      setShadowMode(data.enabled);
+      setShadowStatus(data.enabled ? 'Shadow mode on.' : 'Random fish colors restored.');
+    } catch (error) { setShadowStatus(error.message); }
+    finally { setSwitchingShadow(false); }
+  }
   async function generateSand() {
     setGeneratingSand(true);
     setSandStatus('');
@@ -170,15 +242,25 @@ function App() {
     <main><div className="page-heading"><h1>LED Matrix Settings</h1><div className="hardware-tag">128 × 32 RGB MATRIX</div></div>
       <section className="card display-mode" aria-label="Display mode">
         <button type="button" className="primary-button fish-button" aria-pressed={fishMode}
-          disabled={switchingMode || generatingSand} onClick={toggleFishMode}>FISH</button>
+          disabled={switchingMode || generatingSand || generatingFish} onClick={toggleFishMode}>FISH</button>
         <p role="status">{modeError || (switchingMode ? 'Applying…' : fishMode
           ? 'FISH mode on. Clock, weather, and ticker off. Press FISH to restore.'
           : 'FISH mode off.')}</p>
       </section>
       {fishMode && <section className="card aquarium-controls" aria-label="Aquarium controls">
-        <button type="button" className="primary-button" disabled={generatingSand || switchingMode}
+        <button type="button" className="primary-button" disabled={generatingSand || generatingFish || switchingMode}
           onClick={generateSand}>{generatingSand ? 'Generating…' : 'Generate new sand'}</button>
+        <div className="ticker-toggle"><span id="shadow-mode-label">Shadow mode</span>
+          <button type="button" className="toggle-switch" role="switch" aria-checked={shadowMode}
+            aria-labelledby="shadow-mode-label" disabled={switchingShadow || switchingMode}
+            onClick={toggleShadowMode}>
+            <span className="toggle-track" aria-hidden="true"><span /></span>
+            <span>{switchingShadow ? 'Applying…' : shadowMode ? 'On' : 'Off'}</span>
+          </button>
+        </div>
         <p role="status">{sandStatus}</p>
+        <p role="status">{shadowStatus}</p>
+        <FishTable disabled={switchingMode || generatingSand} onBusyChange={setGeneratingFish} />
       </section>}
       <div className="controls-grid"><SliderCard id="brightness" title="Brightness" setting={brightness} min={1} unit="%" low="Dim" high="Bright" />
         <WeatherCard /></div>

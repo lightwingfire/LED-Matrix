@@ -1,42 +1,27 @@
 """Aquarium display mode."""
 
-from random import Random
-from math import atan2, ceil, cos, exp, hypot, isfinite, pi, sin
+from random import Random, SystemRandom
+from colorsys import hsv_to_rgb
+from math import atan2, ceil, cos, exp, floor, hypot, isfinite, pi, sin
 
 
 class Fish:
     """A fish whose connected parts follow the head with a short delay."""
 
-    def __init__(self, canvas, x=0, y=0, color=(255, 160, 40)):
+    def __init__(self, canvas, x=0, y=0, color=None, seed=None):
         self.canvas = canvas
         self.x = x
         self.y = y
-        self.color = tuple(color)
-        self.colors = {
-            'tailfin_top': (255, 80, 70),
-            'tailfin_bottom': (180, 90, 255),
-            'tail': (255, 210, 60),
-            'body_rear': (80, 210, 120),
-            'body_middle': self.color,
-            'body_front': (60, 210, 230),
-            'head': (255, 100, 180),
-        }
-        self.width = 12
-        self.height = 8
-        self.depth = 3
+        self.baseColor = tuple(color) if color is not None else None
+        self.drawOrder = ('tailfin_top', 'tailfin_bottom', 'tail',
+                          'body_rear', 'body_middle', 'body_front', 'head')
+        self.colors = {name: (0, 0, 0) for name in self.drawOrder}
         self.direction = (1.0, 0.0, 0.0)
         self.turnSpeed = 1.5  # Radians per second.
         self._yaw = self._pitch = 0.0
         self._targetYaw = self._targetPitch = 0.0
         self.turnEase = .6
         self._angularVelocity = [0.0, 0.0]
-        self.drawOrder = ('tailfin_top', 'tailfin_bottom', 'tail',
-                          'body_rear', 'body_middle', 'body_front', 'head')
-        # Rectangles use local (x, y, width, height) coordinates.
-        self.tailfin = ((0, 1, 2, 2), (0, 5, 2, 2))
-        self.tail = (1, 2, 4, 4)
-        self.body = ((4, 1, 3, 6), (5, 0, 4, 8), (8, 1, 3, 6))
-        self.head = (9, 2, 3, 4)
         self.time = 0.0
         self.swimAmplitude = 3.0
         self.swimSpeed = .8
@@ -53,7 +38,73 @@ class Fish:
         self.wanderSpeed = 8.0
         self._wanderRandom = None
         self.brightness = 1.0
+        self.shadowMode = False
+        self.shadowColor = (0, 0, 40)
         self.change = True
+        self.buildFish(seed)
+
+    def buildFish(self, seed=None):
+        """Build varied, overlapping parts; a seed can reproduce a fish's shape."""
+        self.seed = seed if seed is not None else SystemRandom().randrange(2 ** 32)
+        rng = Random(self.seed)
+        self.height = 8
+        self.depth = rng.randint(2, 3)
+        # Tail -> rear body -> middle body -> front body -> head: one peak,
+        # with gradual decreases on either side instead of narrow valleys.
+        peak = rng.randrange(5)
+        heights = [0] * 5
+        heights[peak] = self.height
+        for index in range(peak - 1, -1, -1):
+            heights[index] = max(3, heights[index + 1] - rng.randint(1, 2))
+        for index in range(peak + 1, len(heights)):
+            heights[index] = max(3, heights[index - 1] - rng.randint(1, 2))
+        tail_height, rear_height, middle_height, front_height, head_height = heights
+        top_fin = bottom_fin = rng.randint(2, 3)
+        tail_x = rng.randint(1, top_fin - 1)
+        tail_y = (self.height - tail_height) // 2
+        self.tailfin = ((0, max(0, tail_y - top_fin + 1), top_fin, top_fin),
+                        (0, min(self.height - bottom_fin, tail_y + tail_height - 1),
+                         bottom_fin, bottom_fin))
+        self.partOverlap = {'tailfin_tail': top_fin - tail_x}
+        self.tail = (tail_x, tail_y, rng.randint(3, 6), tail_height)
+
+        def attach(parent_x, parent_width, width, joint):
+            # More overlap brings parts closer; retain a visible strip of each.
+            overlap = rng.randint(1, min(parent_width - 1, width - 1))
+            self.partOverlap[joint] = overlap
+            return parent_x + parent_width - overlap
+
+        rear_width = rng.randint(2, 3)
+        rear_x = attach(tail_x, self.tail[2], rear_width, 'tail_body')
+        rear = (rear_x, (self.height - rear_height) // 2, rear_width, rear_height)
+        middle_width = rng.randint(3, 6)
+        middle = (attach(rear_x, rear_width, middle_width, 'body_rear_middle'),
+                  (self.height - middle_height) // 2, middle_width, middle_height)
+        front_width = rng.randint(2, 3)
+        front = (attach(middle[0], middle_width, front_width, 'body_middle_front'),
+                 (self.height - front_height) // 2,
+                 front_width, front_height)
+        self.body = (rear, middle, front)
+        head_width = rng.randint(2, 3)
+        self.head = (attach(front[0], front_width, head_width, 'body_head'),
+                     (self.height - head_height) // 2, head_width, head_height)
+        self.width = self.head[0] + self.head[2]
+        hue = rng.random()
+        palette = [tuple(round(channel * 255) for channel in
+                         hsv_to_rgb((hue + index / 7) % 1,
+                                    rng.uniform(.65, 1), rng.uniform(.7, 1)))
+                   for index in range(7)]
+        rng.shuffle(palette)
+        self.colors = dict(zip(self.drawOrder, palette))
+        if self.baseColor is not None:
+            self.colors['body_middle'] = self.baseColor
+        self.color = self.colors['body_middle']
+        self.change = True
+
+    def setShadowMode(self, enabled):
+        if self.shadowMode != enabled:
+            self.shadowMode = enabled
+            self.change = True
 
     def setBrightness(self, br):
         brightness = max(0.0, min(1.0, br))
@@ -192,14 +243,17 @@ class Fish:
                 spine[child] = tuple(spine[parent][axis] + distance *
                                      (forwards[parent][axis] + forwards[child][axis]) / 2
                                      for axis in range(3))
-        spine['tailfin_bottom'] = spine['tailfin_top']
+        spine['tailfin_bottom'] = tuple(
+            spine['tailfin_top'][axis] + (along['tailfin_bottom'] - along['tailfin_top']) *
+            forwards['tailfin_bottom'][axis] for axis in range(3))
         # Keep the stack fixed, even when the fish faces away or turns left.
         for (x, y, width, height), name in zip(rectangles, self.drawOrder):
             yaw, pitch = self.partAngles[name]
             forward = forwards[name]
             up = (-sin(pitch) * cos(yaw), cos(pitch), -sin(pitch) * sin(yaw))
             side = (-sin(yaw), 0.0, cos(yaw))
-            red, green, blue = (round(channel * self.brightness) for channel in self.colors[name])
+            color = self.shadowColor if self.shadowMode else self.colors[name]
+            red, green, blue = (round(channel * self.brightness) for channel in color)
             vertical = y + height / 2 - self.height / 2
             center_x = self.x + self.width / 2 + spine[name][0] + up[0] * vertical
             center_y = (self.y + self.height / 2 + spine[name][1] +
@@ -208,8 +262,8 @@ class Fish:
             half_height = (abs(forward[1]) * width + abs(up[1]) * height + abs(side[1]) * self.depth) / 2
             projected_width = max(1, round(2 * half_width))
             projected_height = max(1, round(2 * half_height))
-            left = round(center_x - projected_width / 2)
-            top = round(center_y - projected_height / 2)
+            left = floor(center_x - projected_width / 2 + .5)
+            top = floor(center_y - projected_height / 2 + .5)
             right, bottom = left + projected_width, top + projected_height
             for pixel_y in range(max(0, top), min(canvas.height, bottom)):
                 for pixel_x in range(max(0, left), min(canvas.width, right)):
@@ -307,6 +361,10 @@ class Aquarium:
         self.canvas = canvas
         self.water = Water(canvas)
         self.fish = Fish(canvas)
+        self.fish.id = 1
+        self.fishes = [self.fish]
+        self._nextFishId = 2
+        self.shadowMode = False
         self.fish.x = (canvas.width - self.fish.width) // 2
         self.fish.y = (canvas.height - self.fish.height) // 2
         self.brightness = 1.0
@@ -314,23 +372,59 @@ class Aquarium:
         self.genSand(maxheight, roughnessX, roughnessY, color)
         self.fish.startWandering(self._swimBounds())
 
-    def _swimBounds(self):
+    def _swimBounds(self, fish=None):
+        fish = fish if fish is not None else self.fish
         # Reserve space for rotation, vertical follow-through, and the sand bed.
-        radius = ceil(hypot(self.fish.width, self.fish.height, self.fish.depth) / 2)
-        vertical_margin = radius + ceil(self.fish.swimAmplitude)
+        radius = ceil(hypot(fish.width, fish.height, fish.depth) / 2)
+        vertical_margin = radius + ceil(fish.swimAmplitude)
         sand_height = max(0, min(10, self.canvas.height, int(self.maxheight)))
-        left = max(0, radius - self.fish.width / 2)
-        top = max(0, vertical_margin - self.fish.height / 2)
-        right = max(left, self.canvas.width - radius - self.fish.width / 2)
-        bottom = max(top, self.canvas.height - sand_height - vertical_margin - self.fish.height / 2)
+        left = max(0, radius - fish.width / 2)
+        top = max(0, vertical_margin - fish.height / 2)
+        right = max(left, self.canvas.width - radius - fish.width / 2)
+        bottom = max(top, self.canvas.height - sand_height - vertical_margin - fish.height / 2)
         return left, top, right, bottom
+
+    def addFish(self):
+        fish = Fish(self.canvas)
+        fish.id = self._nextFishId
+        self._nextFishId += 1
+        left, top, right, bottom = self._swimBounds(fish)
+        fish.x = max(left, min(right, (self.canvas.width - fish.width) / 2))
+        fish.y = max(top, min(bottom, (self.canvas.height - fish.height) / 2))
+        fish.setBrightness(self.brightness)
+        fish.setShadowMode(self.shadowMode)
+        fish.startWandering((left, top, right, bottom))
+        self.fishes.append(fish)
+        if self.fish is None:
+            self.fish = fish
+        self.change = True
+        return fish
+
+    def fishStats(self):
+        return [dict(id=fish.id, seed=fish.seed, speed=round(fish.wanderSpeed, 1))
+                for fish in self.fishes]
+
+    def deleteFish(self, fish_id):
+        fish = next((fish for fish in self.fishes if fish.id == fish_id), None)
+        if fish is None:
+            return False
+        self.fishes.remove(fish)
+        self.fish = self.fishes[0] if self.fishes else None
+        self.change = True
+        return True
+
+    def setShadowMode(self, enabled):
+        self.shadowMode = enabled
+        for fish in self.fishes:
+            fish.setShadowMode(enabled)
 
     def setBrightness(self, br):
         brightness = max(0.0, min(1.0, br))
         if self.brightness != brightness:
             self.brightness = brightness
             self.water.setBrightness(brightness)
-            self.fish.setBrightness(brightness)
+            for fish in self.fishes:
+                fish.setBrightness(brightness)
             self.change = True
 
     def getBrightness(self):
@@ -340,12 +434,13 @@ class Aquarium:
         change = self.change
         self.change = False
         water_changed = self.water.changed()
-        fish_changed = self.fish.changed()
+        fish_changed = any([fish.changed() for fish in self.fishes])
         return change or water_changed or fish_changed
 
     def update(self, dt):
         self.water.update(dt)
-        self.fish.update(dt)
+        for fish in self.fishes:
+            fish.update(dt)
 
     def drawWater(self, canvas=None):
         self.water.render(canvas)
@@ -361,10 +456,24 @@ class Aquarium:
     def regenerateSand(self):
         self.genSand(self.maxheight, self.roughnessX, self.roughnessY, self.color)
 
+    def regenerateFish(self, fish_id=None):
+        fish = self.fish if fish_id is None else next((fish for fish in self.fishes if fish.id == fish_id), None)
+        if fish is None:
+            return False
+        center_x = fish.x + fish.width / 2
+        center_y = fish.y + fish.height / 2
+        fish.buildFish()
+        left, top, right, bottom = self._swimBounds(fish)
+        fish.x = max(left, min(right, center_x - fish.width / 2))
+        fish.y = max(top, min(bottom, center_y - fish.height / 2))
+        fish.startWandering((left, top, right, bottom))
+        self.change = True
+
     def render(self, canvas=None):
         canvas = canvas if canvas is not None else self.canvas
         self.drawWater(canvas)
         for (x, y), color in self.sand.items():
             red, green, blue = (round(channel * self.brightness) for channel in color)
             canvas.SetPixel(x, y, red, green, blue)
-        self.fish.render(canvas)
+        for fish in self.fishes:
+            fish.render(canvas)

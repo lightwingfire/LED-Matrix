@@ -17,9 +17,14 @@ class ser():
         self.tickerSpeed = 18
         self.tickerEnabled = True
         self.fishMode = False
+        self.shadowMode = False
         self.lastFrame = None
         self.sandLock = threading.Lock()
         self.sandRequested = False
+        self.fishLock = threading.Lock()
+        self.fishRequested = False
+        self.fishes = []
+        self.fishCommands = []
         self.weatherLocation = os.getenv("WEATHER_LOCATION", "08865")
         self.locationLock = threading.Lock()
         self.newsLock = threading.Lock()
@@ -37,6 +42,16 @@ class ser():
         self.app.add_url_rule('/health', 'health', self.getHealth, methods=['GET'])
         self.app.add_url_rule('/aquarium/sand', 'generate_sand', self.requestSand,
                               methods=['POST'])
+        self.app.add_url_rule('/aquarium/fish', 'generate_fish', self.requestFish,
+                              methods=['POST'])
+        self.app.add_url_rule('/aquarium/shadow', 'shadow_mode', self.setShadowMode,
+                              methods=['GET', 'POST'])
+        self.app.add_url_rule('/aquarium/fishes', 'fishes', self.manageFish,
+                              methods=['GET', 'POST'])
+        self.app.add_url_rule('/aquarium/fishes/<int:fish_id>/regenerate', 'regenerate_fish',
+                              self.requestFishRegeneration, methods=['POST'])
+        self.app.add_url_rule('/aquarium/fishes/<int:fish_id>', 'delete_fish',
+                              self.requestFishDeletion, methods=['DELETE'])
         # threading.Thread(target=self.start()).start()
         # self.start()
 
@@ -53,7 +68,63 @@ class ser():
             return render_template("index.html", initial_state=dict(
                 ip=self.ip, brightness=self.sliderValue, weatherLocation=self.weatherLocation,
                 news=self.newsSnapshot(), tickerSpeed=self.tickerSpeed,
-                tickerEnabled=self.tickerEnabled, fishMode=self.fishMode))
+                tickerEnabled=self.tickerEnabled, fishMode=self.fishMode,
+                shadowMode=self.shadowMode, fishes=self.fishSnapshot()))
+
+    def setFishStats(self, fishes):
+        with self.fishLock:
+            self.fishes = [dict(fish) for fish in fishes]
+
+    def fishSnapshot(self):
+        with self.fishLock:
+            return [dict(fish) for fish in self.fishes]
+
+    def manageFish(self):
+        if request.method == 'POST':
+            if not self.fishMode:
+                return jsonify(error="Turn on FISH mode first."), 409
+            with self.fishLock:
+                self.fishCommands.append(dict(action='add'))
+            return jsonify(queued=True), 202
+        response = jsonify(fishes=self.fishSnapshot())
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    def requestFishRegeneration(self, fish_id):
+        if not self.fishMode:
+            return jsonify(error="Turn on FISH mode first."), 409
+        with self.fishLock:
+            if not any(fish['id'] == fish_id for fish in self.fishes):
+                return jsonify(error="Fish not found."), 404
+            self.fishCommands.append(dict(action='regenerate', id=fish_id))
+        return jsonify(queued=True), 202
+
+    def consumeFishCommands(self):
+        with self.fishLock:
+            commands = self.fishCommands
+            self.fishCommands = []
+        return commands
+
+    def requestFishDeletion(self, fish_id):
+        if not self.fishMode:
+            return jsonify(error="Turn on FISH mode first."), 409
+        with self.fishLock:
+            if not any(fish['id'] == fish_id for fish in self.fishes):
+                return jsonify(error="Fish not found."), 404
+            self.fishCommands.append(dict(action='delete', id=fish_id))
+        return jsonify(queued=True), 202
+
+    def getShadowMode(self):
+        return self.shadowMode
+
+    def setShadowMode(self):
+        if request.method == 'POST':
+            data = request.get_json(silent=True)
+            enabled = data.get('enabled') if isinstance(data, dict) else None
+            if type(enabled) is not bool:
+                return jsonify(error="Enabled must be true or false."), 400
+            self.shadowMode = enabled
+        return jsonify(enabled=self.shadowMode)
 
     def getFishMode(self):
         return self.fishMode
@@ -79,6 +150,19 @@ class ser():
         with self.sandLock:
             requested = self.sandRequested
             self.sandRequested = False
+        return requested
+
+    def requestFish(self):
+        if not self.fishMode:
+            return jsonify(error="Turn on FISH mode first."), 409
+        with self.fishLock:
+            self.fishRequested = True
+        return jsonify(queued=True), 202
+
+    def consumeFishRequest(self):
+        with self.fishLock:
+            requested = self.fishRequested
+            self.fishRequested = False
         return requested
 
     def setFishMode(self):

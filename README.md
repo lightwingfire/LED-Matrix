@@ -98,10 +98,23 @@ The fish chooses random destinations above the sand, turns toward them in 3D,
 and swims at varying speeds. Its parts keep their fixed drawing order and
 delayed head-to-tail motion. Turns ease in and out, with each body section
 following more slowly toward the tailfin while remaining connected.
+`Fish.buildFish()` generates varied sizes for its seven overlapping parts when
+the fish is initialized. `buildFish(seed=7)` can reproduce a particular shape.
 
 While FISH mode is on, **Generate new sand** creates a new sand profile using
 the current sand settings. It stays fixed between frames and keeps neighboring
 columns within one pixel of each other.
+The **add fish** button adds another independently swimming fish and a row in
+the fish table. Each row shows its current cruise speed in pixels per second,
+its generation seed, and a **gen new fish** button that rebuilds only that fish.
+Each row also has **delete fish**, which removes that fish from the aquarium.
+You can delete every fish and add new ones afterward.
+The table updates every second. Fish keep stable row IDs when regenerated;
+water, sand, brightness, and shadow mode are preserved. The app starts with
+one fish, and added fish reset when the app restarts.
+**Shadow mode** makes every fish part dark blue. Turn it off to restore the
+fish's colors. New fish get random part colors; generating one while shadow
+mode is on keeps the shadow appearance. Shadow mode resets to off on restart.
 
 Sand generation uses `roughnessX` for the number of columns between height-change
 attempts and `roughnessY` for the percentage chance of a one-pixel height change

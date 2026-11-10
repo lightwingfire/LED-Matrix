@@ -48,6 +48,7 @@ async def main(matrix, canvas):
     wM = weatherManager(canvas)
     tt = TickerTapeManager(canvas)
     aquarium = Aquarium(canvas)
+    webpage.setFishStats(aquarium.fishStats())
     webpage.setNews(tt.newsJson, updated_at=tt.newsUpdatedAt, cached=tt.newsCached)
 
     change = 0
@@ -118,8 +119,19 @@ async def main(matrix, canvas):
         if fish_mode:
             if webpage.consumeSandRequest():
                 aquarium.regenerateSand()
+            if webpage.consumeFishRequest():
+                aquarium.regenerateFish()
+            for command in webpage.consumeFishCommands():
+                if command['action'] == 'add':
+                    aquarium.addFish()
+                elif command['action'] == 'regenerate':
+                    aquarium.regenerateFish(command['id'])
+                elif command['action'] == 'delete':
+                    aquarium.deleteFish(command['id'])
+            aquarium.setShadowMode(webpage.getShadowMode())
             aquarium.setBrightness(webpage.getSlider())
             aquarium.update(dt)
+            webpage.setFishStats(aquarium.fishStats())
             canvas.Clear()
             aquarium.render(canvas)
             canvas = matrix.SwapOnVSync(canvas)
