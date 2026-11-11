@@ -183,6 +183,77 @@ function FishTable({ disabled, onBusyChange }) {
   </section>;
 }
 
+function SpotifyCard() {
+  const [state, setState] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    let active = true;
+    let timer;
+    const controller = new AbortController();
+    async function load() {
+      try {
+        const response = await fetch('/spotify', { cache: 'no-store', signal: controller.signal });
+        if (!response.ok) throw new Error('Could not load Spotify status.');
+        const data = await response.json();
+        if (active) { setState(data); setError(''); }
+      } catch (error) { if (active) setError(error.message); }
+      finally { if (active) timer = setTimeout(load, 5000); }
+    }
+    load();
+    return () => { active = false; controller.abort(); clearTimeout(timer); };
+  }, []);
+  async function change(disconnect = false, mode = null, upNext = null) {
+    setBusy(true); setError('');
+    try {
+      const data = await post(disconnect ? '/spotify/disconnect' : '/spotify',
+        disconnect ? {} : mode ? { mode } : upNext !== null ? { upNext } : { enabled: !state.enabled });
+      setState(data);
+    } catch (error) { setError(error.message); }
+    finally { setBusy(false); }
+  }
+  return <section className="card spotify-card" aria-labelledby="spotify-title">
+    <div className="news-header"><h2 id="spotify-title">Spotify</h2>
+      {state?.configured && <a className="primary-button" href="/spotify/connect">
+        {state.connected ? 'Reconnect Spotify' : 'Connect Spotify'}</a>}</div>
+    <p role="status">{!state ? 'Loading Spotify status...' : !state.configured
+      ? 'Add your Spotify Client ID to settings.toml, then restart the app. See README for setup.'
+      : !state.connected ? 'Connect your Spotify account to show what you are listening to.'
+      : state.track ? `${state.track.is_playing ? 'Playing' : 'Paused'}: ${state.track.title} - ${state.track.artist}`
+      : 'Connected. Play a song on Spotify to see it here.'}</p>
+    {state && <div className="spotify-mode-control">
+      <label htmlFor="spotify-display-mode">Spotify display</label>
+      <select id="spotify-display-mode" value={state.mode} disabled={busy}
+        onChange={event => change(false, event.target.value)}>
+        <option value="ticker">Ticker tape (default)</option>
+        <option value="weather">Replace weather when playing</option>
+        <option value="focus">Spotify focus</option>
+      </select>
+    </div>}
+    {state?.mode === 'weather' && <div className="spotify-mode-control">
+      <label><input type="checkbox" checked={state.upNext} disabled={busy}
+        onChange={event => change(false, null, event.target.checked)} /> Up Next in ticker tape</label>
+      <p className="hint">Adds a green Up Next message between headlines. Enable this before connecting Spotify,
+        or use Reconnect Spotify to grant queue access.</p>
+    </div>}
+    {state?.connected && <div className="spotify-actions">
+      <button type="button" className="primary-button" disabled={busy} aria-pressed={state.enabled}
+        onClick={() => change()}>{state.enabled ? 'Hide on board' : 'Show on board'}</button>
+      <button type="button" className="text-button" disabled={busy} onClick={() => change(true)}>Disconnect</button>
+    </div>}
+    <p className="hint">{state?.mode === 'focus'
+      ? 'Full screen song details with 24 × 24 album art and a 4-pixel margin.'
+      : state?.mode === 'weather'
+      ? '20 × 20 album art with a 2-pixel margin and song details replace the weather while playing. Clock and ticker stay visible.'
+      : 'Adds a green 🎵 Now Play: song - artist message between news headlines.'}
+      {' '}Weather mode keeps now-playing details out of the ticker; Up Next is optional.
+      {' '}Artwork layouts wait for the album cover. Focus falls back to the ticker if art is unavailable.
+      {' '}FISH mode takes priority. Display mode resets to ticker after restart.</p>
+    {(error || state?.error) && <p className="error" role="status">{error || state.error}</p>}
+    {state?.mode === 'weather' && state.upNext && state.queueError && <p className="error" role="status">{state.queueError}</p>}
+  </section>;
+}
+
 function App() {
   const brightness = useSlider(initial.brightness, '/', 'out');
   const speed = useSlider(initial.tickerSpeed, '/ticker-speed', 'speed');
@@ -265,6 +336,7 @@ function App() {
       <div className="controls-grid"><SliderCard id="brightness" title="Brightness" setting={brightness} min={1} unit="%" low="Dim" high="Bright" />
         <WeatherCard /></div>
       <p className="session-note">Brightness resets when the app restarts. Automatic brightness scheduling is not available.</p>
+      <SpotifyCard />
       <section className="card ticker-section" aria-labelledby="ticker-title">
         <div className="ticker-heading"><h2 id="ticker-title">News</h2>
           <div className="ticker-toggle"><span id="ticker-toggle-label">Ticker tape</span>

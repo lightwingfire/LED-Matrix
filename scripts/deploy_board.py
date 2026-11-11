@@ -17,7 +17,7 @@ import uuid
 ROOT = Path(__file__).resolve().parents[1]
 APP_FILES = (
     'main.py', 'ser.py', 'config.py', 'clock.py', 'weather.py', 'tickertape.py',
-    'drawGraphics.py', 'aquarium.py', 'run.sh', 'Templates/index.html', 'weather_conditions.json',
+    'drawGraphics.py', 'aquarium.py', 'spotify.py', 'run.sh', 'Templates/index.html', 'weather_conditions.json',
 )
 
 

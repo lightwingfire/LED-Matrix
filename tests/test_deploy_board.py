@@ -21,7 +21,7 @@ class DeploymentTests(unittest.TestCase):
                 path.write_bytes(b'example\r\n')
             for name in ('static/ui/app.js', 'static/ui/app.css', 'day/113.bmp',
                          '5x8.bdf', 'settings.toml', 'runtime/settings.toml',
-                         '.env', 'cachedArticles.json'):
+                         '.env', '.spotify-tokens.json', 'runtime/.spotify-tokens.json', 'cachedArticles.json'):
                 path = root / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('private' if 'settings' in name else 'data')
@@ -34,6 +34,7 @@ class DeploymentTests(unittest.TestCase):
             with tarfile.open(archive_path) as archive:
                 names = archive.getnames()
                 self.assertIn('main.py', names)
+                self.assertIn('spotify.py', names)
                 self.assertIn('static/ui/app.js', names)
                 self.assertIn('static/ui/app.css', names)
                 self.assertIn('day/113.bmp', names)
@@ -41,6 +42,8 @@ class DeploymentTests(unittest.TestCase):
                 self.assertNotIn('settings.toml', names)
                 self.assertNotIn('runtime/settings.toml', names)
                 self.assertNotIn('.env', names)
+                self.assertNotIn('.spotify-tokens.json', names)
+                self.assertNotIn('runtime/.spotify-tokens.json', names)
                 self.assertNotIn('cachedArticles.json', names)
                 self.assertEqual(archive.extractfile('run.sh').read(), b'example\n')
 

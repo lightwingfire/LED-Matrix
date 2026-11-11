@@ -56,6 +56,7 @@ async def main(matrix, canvas):
     start_time = time.monotonic()
     dt = 0
     previous_fish_mode = False
+    previous_spotify = False
 
     def updateDeltaTime():
         clock.updateFace()
@@ -140,6 +141,7 @@ async def main(matrix, canvas):
             continue
         tt.setSpeed(webpage.getTickerSpeed())
         tt.setEnabled(webpage.getTickerEnabled())
+        tt.setNowPlaying(webpage.spotifyTickerText())
         updateDeltaTime()
         if refresh_task.done() and wM.location != webpage.getWeatherLocation():
             wM.location = webpage.getWeatherLocation()
@@ -147,7 +149,7 @@ async def main(matrix, canvas):
         elif clock.newHour() and refresh_task.done():
             refresh_task = asyncio.create_task(refreshAPI())
 
-        if mode_changed or checkForChange():
+        if mode_changed or checkForChange() or previous_spotify:
             canvas.Clear()
 
             if change != webpage.getSlider():
@@ -160,6 +162,8 @@ async def main(matrix, canvas):
             
             
 
+        spotify_playing = webpage.renderSpotify(canvas, dt) is True
+        previous_spotify = spotify_playing
         canvas = matrix.SwapOnVSync(canvas)
         webpage.reportFrame()
 

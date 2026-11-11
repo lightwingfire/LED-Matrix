@@ -16,6 +16,7 @@ class ticktape:
         self.y = y
         self.canvas = canvas
         self.change = True
+        self.kind = 'news'
 
 
         self.font= graphics.Font()
@@ -61,8 +62,20 @@ class ticktape:
         self.text = text
 
     def render(self, canvas=None):
-        graphics.DrawText(canvas if canvas is not None else self.canvas,
-                          self.font,math.floor(self.x),self.y,self.textColor,self.text)
+        canvas = canvas if canvas is not None else self.canvas
+        x = math.floor(self.x)
+        text = self.text
+        if text.startswith('🎵 '):
+            # The BDF font has no emoji glyph: draw a small musical note in pixels.
+            note = ('00111', '00101', '00101', '00101', '11101', '11111', '00011')
+            for row, pixels in enumerate(note):
+                for column, pixel in enumerate(pixels):
+                    if pixel == '1' and 0 <= x + column < canvas.width:
+                        canvas.SetPixel(x + column, self.y - 7 + row,
+                                        self.textColor.red, self.textColor.green, self.textColor.blue)
+            x += 10
+            text = text[2:]
+        graphics.DrawText(canvas, self.font, x, self.y, self.textColor, text)
 
     def update(self,dt):  
         self.x -= self.scrollSpeed * dt
@@ -91,6 +104,8 @@ class TickerTapeManager:
         self.newsPlaylist = []
         self.newsPlaylistSource = ()
         self.lastHeadline = None
+        self.nowPlaying = None
+        self.spotifyNext = False
 
         with open('cachedArticles.json', 'r') as file:
             # print(json.load(file))
@@ -184,7 +199,43 @@ class TickerTapeManager:
         
         return
 
+    def setNowPlaying(self, text):
+        """Insert a green music entry next, keeping queued news and scroll position."""
+        if not isinstance(text, str):
+            text = None
+        if text == self.nowPlaying:
+            return
+        self.nowPlaying = text
+        self.queque = [words for words in self.queque if words.kind != 'spotify']
+        # Removing or changing a music item must not leave gaps in the queue.
+        for previous, words in zip(self.queque, self.queque[1:]):
+            words.x = previous.x + previous.getWidth() + 1
+        if text:
+            index = next((i for i, words in enumerate(self.queque) if words.x >= 128), len(self.queque))
+            x = max(128, self.queque[index - 1].x + self.queque[index - 1].getWidth() + 1) if index else 128
+            words = ticktape(x, 32, self.canvas)
+            words.kind = 'spotify'
+            words.setText(text + ' ')
+            words.setTTColor(graphics.Color(30, 215, 96))
+            words.setBrightness(self.brightness)
+            self.queque.insert(index, words)
+            for previous, following in zip(self.queque[index:], self.queque[index + 1:]):
+                following.x = previous.x + previous.getWidth() + 1
+        if not self.queque:
+            self.queque.append(ticktape(128, 32, self.canvas))
+            self.queque[-1].setText(self.getNextInfo())
+        self.spotifyNext = False
+        self.change = True
+
     def getNextInfo(self):
+        if self.nowPlaying and self.spotifyNext:
+            self.spotifyNext = False
+            self.queque[-1].kind = 'spotify'
+            self.queque[-1].setTTColor(graphics.Color(30, 215, 96))
+            self.queque[-1].setBrightness(self.brightness)
+            return self.nowPlaying + ' '
+        self.spotifyNext = bool(self.nowPlaying)
+        self.queque[-1].kind = 'news'
         # Deduplicate and validate titles before building a complete rotation.
         headlines = []
         for article in self.newsJson.get("articles", []):
@@ -209,6 +260,7 @@ class TickerTapeManager:
         possibleColors = [graphics.Color(0,255,255),graphics.Color(0, 150, 255),graphics.Color(0, 163, 108)]
         
         self.queque[-1].setTTColor(random.choice(possibleColors))
+        self.queque[-1].setBrightness(self.brightness)
         return text
 
     def update(self,dt):
@@ -252,7 +304,8 @@ class TickerTapeManager:
             self.queque = self.queque[1:] + self.queque[:1]
             # Wurd = ["test BUDDY HOLLY"," KING SHIT butt","Hello Worly","heh heh heHEHEHEH HEHE"]
             # self.queque[-1].setText(random.choice(Wurd))
-            self.queque[-1].x = self.queque[-2].x + self.queque[-2].getWidth() + 1
+            self.queque[-1].x = (self.queque[-2].x + self.queque[-2].getWidth() + 1
+                                   if len(self.queque) > 1 else 128)
             self.queque[-1].setText(self.getNextInfo())
             shuffleCount = shuffleCount + 1 
             if shuffleCount > len(self.queque):

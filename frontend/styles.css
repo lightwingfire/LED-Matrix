@@ -50,3 +50,10 @@
 .fish-table td:last-child { text-align: right; }
 .fish-seed { font-family: Consolas, monospace; }
 .delete-fish { margin-left: 12px; color: #ffc0ad; }
+.spotify-card { padding: 24px 30px; margin-bottom: 24px; }
+.spotify-card p { font-size: 13px; overflow-wrap: anywhere; }
+.spotify-card .hint { font-size: 11px; }
+.spotify-card a.primary-button { text-decoration: none; }
+.spotify-actions { display: flex; gap: 16px; flex-wrap: wrap; }
+.spotify-mode-control { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin: 16px 0; font-size: 13px; }
+.spotify-mode-control select { max-width: 100%; padding: 9px 12px; border: 1px solid #465348; border-radius: 6px; background: #111816; color: #e8eeea; font: inherit; }

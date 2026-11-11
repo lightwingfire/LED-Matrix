@@ -2,6 +2,8 @@
 settings.toml
 settings.toml.bak
 .weather-settings-*.tmp
+.spotify-tokens.json
+.spotify-*.tmp
 /runtime/
 run.log
 .env

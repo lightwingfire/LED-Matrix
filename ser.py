@@ -1,17 +1,24 @@
 # import the Flask library
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, redirect
 import os
 import re
 import threading
 import time
 from urllib.parse import urlsplit
 from config import PROJECT_DIR, save_weather_location
+from spotify import Spotify, SpotifyError
+import requests
 import socket
 class ser():
      
     def __init__(self):
         self.app = Flask(__name__, template_folder=str(PROJECT_DIR / "Templates"),
                          static_folder=str(PROJECT_DIR / "static"))
+        self.spotify = Spotify()
+        self.app.add_url_rule('/spotify', 'spotify_status', self.spotifyStatus, methods=['GET', 'POST'])
+        self.app.add_url_rule('/spotify/connect', 'spotify_connect', self.spotifyConnect)
+        self.app.add_url_rule('/spotify/callback', 'spotify_callback', self.spotifyCallback)
+        self.app.add_url_rule('/spotify/disconnect', 'spotify_disconnect', self.spotifyDisconnect, methods=['POST'])
         self.ip = os.getenv("WEB_HOST", "127.0.0.1")
         self.sliderValue = 100
         self.tickerSpeed = 18
@@ -56,8 +63,73 @@ class ser():
         # self.start()
 
     def start(self):
+        self.spotify.start()
         self.app.run(debug=False, use_reloader=False, host=self.ip,
                      port=int(os.getenv("WEB_PORT", "5000")))
+
+    def spotifyStatus(self):
+        if request.method == 'POST':
+            data = request.get_json(silent=True)
+            if not isinstance(data, dict) or not data or set(data) - {'enabled', 'mode', 'upNext'}:
+                return jsonify(error='Choose enabled or a Spotify display mode.'), 400
+            if 'enabled' in data and type(data['enabled']) is not bool:
+                return jsonify(error='Enabled must be true or false.'), 400
+            if 'mode' in data and data['mode'] not in ('ticker', 'weather', 'focus'):
+                return jsonify(error='Choose ticker, weather, or focus.'), 400
+            if 'upNext' in data and type(data['upNext']) is not bool:
+                return jsonify(error='Up Next must be true or false.'), 400
+            with self.spotify.lock:
+                if 'enabled' in data:
+                    self.spotify.enabled = data['enabled']
+                if 'mode' in data:
+                    self.spotify.mode = data['mode']
+                if 'upNext' in data:
+                    self.spotify.up_next = data['upNext']
+        response = jsonify(self.spotify.snapshot())
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    def spotifyConnect(self):
+        try:
+            state, url = self.spotify.authorize()
+        except SpotifyError as error:
+            return jsonify(error=str(error)), 400
+        response = redirect(url)
+        response.set_cookie('spotify_state', state, max_age=600, httponly=True,
+                            samesite='Lax', secure=request.is_secure, path='/spotify/callback')
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    def spotifyCallback(self):
+        try:
+            self.spotify.complete(request.args.get('code'), request.args.get('state'),
+                                  request.cookies.get('spotify_state'))
+            response = redirect('/')
+        except SpotifyError as error:
+            response = jsonify(error=str(error))
+            response.status_code = 400
+        except (requests.RequestException, ValueError, OSError):
+            response = jsonify(error='Could not finish Spotify sign-in. Check connection and token-file permissions, then try again.')
+            response.status_code = 502
+        response.delete_cookie('spotify_state', path='/spotify/callback')
+        response.headers['Cache-Control'] = 'no-store'
+        response.headers['Referrer-Policy'] = 'no-referrer'
+        return response
+
+    def spotifyDisconnect(self):
+        try:
+            self.spotify.disconnect()
+        except OSError:
+            return jsonify(error='Could not remove the saved Spotify connection. Check file permissions.'), 500
+        response = jsonify(self.spotify.snapshot())
+        response.headers['Cache-Control'] = 'no-store'
+        return response
+
+    def renderSpotify(self, canvas, dt):
+        return self.spotify.render(canvas, dt, self.getSlider())
+
+    def spotifyTickerText(self):
+        return self.spotify.ticker_text()
         
 
     # @app.route('/', methods=['GET', 'POST'])

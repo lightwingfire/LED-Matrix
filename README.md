@@ -135,6 +135,87 @@ repeating. Refreshing the feed leaves already queued stories intact.
 
 ## Local settings
 
+### Spotify now playing
+
+By default, Spotify adds the green message `🎵 Now Play: {song} - {artist}`
+between news headlines in the ticker. It follows the ticker's speed, brightness,
+and on/off controls. A small pixel music note represents the emoji on the board.
+Changed songs replace queued music entries; pausing or disconnecting removes them.
+The dashboard's **Spotify display** selector offers three modes:
+
+- **Ticker tape** (default): keeps the clock and weather, adding green music entries.
+- **Replace weather when playing**: shows 20×20 album art with a 2-pixel margin and scrolling song details
+  in an expanded weather area (x=58–127, y=0–23). The cover is shifted 10 pixels
+  left to give the title and artist 10 more pixels of horizontal space.
+  The current song is never repeated in the ticker in this mode.
+  Enable **Up Next in ticker tape** to insert a green `🎵 Up Next: {song} - {artist}`
+  message between news headlines instead. Up Next defaults to off and resets on restart.
+  Enable it before connecting, or click **Reconnect Spotify** after enabling it to
+  grant the additional `user-read-playback-state` permission for the
+  [queue endpoint](https://developer.spotify.com/documentation/web-api/reference/get-queue).
+  Empty queues, podcasts, paused playback, stale data, and queue failures remove the entry.
+- **Spotify focus**: fills the screen with 24×24 album art with a 4-pixel margin, song, artist, and progress.
+  Above the progress bar, the album release year is aligned left and total song duration
+  (`m:ss`) is aligned to the far right, using the ticker's 5×8 font.
+
+Weather and focus modes require the actual album cover. While artwork is loading
+or unavailable, the normal display remains visible. Focus falls back to a now-playing
+ticker entry; weather mode keeps now-playing entries out of the ticker even without art.
+Paused, stale, or disconnected playback restores the normal display.
+FISH mode takes priority. The dashboard also has connection and **Hide on board**
+controls. Playback is read-only: music still plays on your Spotify device.
+Mode resets to ticker on restart.
+
+`sample_album_art(image, size)` in `spotify.py` accepts a Pillow image and either
+a square size (such as `24` or `32`) or `(width, height)`. It returns an RGB image
+using LANCZOS sampling and black letterboxing to preserve the complete cover.
+Pass `preserve_aspect=False` to fill a rectangular size exactly, as the weather layout does.
+Downloads run in the background; sampled sizes are cached for each album.
+Spotify is polled in a background thread every five seconds; network requests never
+run on the display loop. After 30 seconds without fresh data, the normal display returns.
+Podcasts, ads, and unavailable tracks also use the normal display.
+
+1. Create an app in the [Spotify Developer Dashboard](https://developer.spotify.com/dashboard).
+   Select Web API and register this exact redirect URI:
+   `http://127.0.0.1:5000/spotify/callback`.
+2. Add the following root-level settings to the settings file used by the board
+   (`settings.toml`, or `runtime/settings.toml` when launched with that file):
+
+   ```toml
+   SPOTIFY_CLIENT_ID = "your-app-client-id"
+   SPOTIFY_REDIRECT_URI = "http://127.0.0.1:5000/spotify/callback"
+   ```
+
+   No client secret is needed. This integration uses
+   [Authorization Code with PKCE](https://developer.spotify.com/documentation/web-api/tutorials/code-pkce-flow)
+   with `user-read-currently-playing` permission and optional `user-read-playback-state`
+   permission for Up Next. Environment variables override settings.
+3. Restart the app and open `http://127.0.0.1:5000`. Click **Connect Spotify**,
+   sign in, then start playing music.
+
+For the Pi, establish a tunnel from your computer before opening the dashboard:
+
+```powershell
+ssh -N -L 5000:127.0.0.1:5000 your-pi-user@your-pi-address
+```
+
+Leave that terminal running, then open `http://127.0.0.1:5000` on the same computer
+and connect Spotify there. Stop any local copy of this app using port 5000 first.
+The callback reaches the Pi through the tunnel. For a different local port, change
+the tunnel, browser address, redirect setting, and Spotify app registration together.
+Spotify requires [HTTPS or an explicit loopback IP for redirects](https://developer.spotify.com/documentation/web-api/concepts/redirect_uri);
+a plain HTTP Pi LAN address and `localhost` are not accepted.
+
+Tokens are saved beside the active settings file in `.spotify-tokens.json`, ignored
+by Git and excluded from deployment packages. The connection survives restarts;
+**Disconnect** removes the local tokens. To revoke the app's permission entirely,
+remove it from your Spotify account's connected apps. Display visibility resets
+to on when the app restarts. Each installation needs its own connection.
+If Spotify returns access denied, check your app's user allowlist and the current
+[development-mode requirements](https://developer.spotify.com/documentation/web-api/concepts/quota-modes).
+
+### News and weather settings
+
 The app automatically reads `settings.toml` beside `main.py`. This file is
 ignored by Git. Keep your existing file, or create one with your own values:
 
