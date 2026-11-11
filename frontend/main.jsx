@@ -187,6 +187,8 @@ function SpotifyCard() {
   const [state, setState] = useState(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [callbackUrl, setCallbackUrl] = useState('');
+  const [signInStatus, setSignInStatus] = useState('');
   useEffect(() => {
     let active = true;
     let timer;
@@ -212,15 +214,40 @@ function SpotifyCard() {
     } catch (error) { setError(error.message); }
     finally { setBusy(false); }
   }
+  async function finishSignIn(event) {
+    event.preventDefault();
+    setBusy(true); setSignInStatus('Completing Spotify sign-in...');
+    try {
+      const data = await post('/spotify/callback', { url: callbackUrl.trim() });
+      setState(data); setCallbackUrl('');
+      setSignInStatus('Spotify connected. You can close the sign-in tab.');
+    } catch (error) { setSignInStatus(error.message); }
+    finally { setBusy(false); }
+  }
   return <section className="card spotify-card" aria-labelledby="spotify-title">
     <div className="news-header"><h2 id="spotify-title">Spotify</h2>
-      {state?.configured && <a className="primary-button" href="/spotify/connect">
+      {state?.configured && <a className="primary-button" href="/spotify/connect" target="_blank" rel="noopener noreferrer">
         {state.connected ? 'Reconnect Spotify' : 'Connect Spotify'}</a>}</div>
     <p role="status">{!state ? 'Loading Spotify status...' : !state.configured
       ? 'Add your Spotify Client ID to settings.toml, then restart the app. See README for setup.'
       : !state.connected ? 'Connect your Spotify account to show what you are listening to.'
       : state.track ? `${state.track.is_playing ? 'Playing' : 'Paused'}: ${state.track.title} - ${state.track.artist}`
       : 'Connected. Play a song on Spotify to see it here.'}</p>
+    {state?.configured && <details className="spotify-sign-in">
+      <summary>Finish sign-in by pasting the callback URL</summary>
+      <p>Click {state.connected ? 'Reconnect Spotify' : 'Connect Spotify'} above and sign in in the new tab.
+        If the callback page cannot open or shows a sign-in error, copy its entire address,
+        return to this tab, and paste it below within 10 minutes. Keep this dashboard open in the same browser.</p>
+      <form onSubmit={finishSignIn}>
+        <label htmlFor="spotify-callback-url">Full Spotify callback URL</label>
+        <div className="input-group"><input id="spotify-callback-url" type="url" required
+          value={callbackUrl} onChange={event => setCallbackUrl(event.target.value)}
+          autoComplete="off" spellCheck={false} maxLength={8192} disabled={busy}
+          placeholder="http://127.0.0.1:5000/spotify/callback?code=...&state=..." />
+          <button className="primary-button" disabled={busy}>{busy ? 'Connecting...' : 'Finish connection'}</button>
+        </div><p className="form-status" role="status">{signInStatus}</p>
+      </form>
+    </details>}
     {state && <div className="spotify-mode-control">
       <label htmlFor="spotify-display-mode">Spotify display</label>
       <select id="spotify-display-mode" value={state.mode} disabled={busy}

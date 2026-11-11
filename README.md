@@ -193,7 +193,24 @@ Podcasts, ads, and unavailable tracks also use the normal display.
 3. Restart the app and open `http://127.0.0.1:5000`. Click **Connect Spotify**,
    sign in, then start playing music.
 
-For the Pi, establish a tunnel from your computer before opening the dashboard:
+To sign in directly from the Pi's LAN dashboard without an SSH tunnel:
+
+1. Open the board's dashboard in your browser and click **Connect Spotify**.
+   Sign-in opens in a new tab; keep the original dashboard tab open.
+2. Complete Spotify sign-in. The new tab will redirect to
+   `http://127.0.0.1:5000/spotify/callback?...`. It may fail to load or show a
+   sign-in error because that address points to your browser's computer.
+3. Copy the **entire URL from the address bar**. Return to the original dashboard,
+   expand **Finish sign-in by pasting the callback URL**, paste it, and click
+   **Finish connection**.
+
+Complete this within 10 minutes using the same browser and dashboard address where
+you clicked Connect. The board must stay running during sign-in. Start a fresh
+connection after a restart, expired attempt, or previously used callback.
+The board validates the callback address, browser cookie, state, and PKCE verifier;
+it never visits the pasted URL. Tokens remain on the board.
+
+Alternatively, establish a tunnel from your computer before opening the dashboard:
 
 ```powershell
 ssh -N -L 5000:127.0.0.1:5000 your-pi-user@your-pi-address

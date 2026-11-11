@@ -4,7 +4,7 @@ import os
 import re
 import threading
 import time
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, parse_qs
 from config import PROJECT_DIR, save_weather_location
 from spotify import Spotify, SpotifyError
 import requests
@@ -17,7 +17,8 @@ class ser():
         self.spotify = Spotify()
         self.app.add_url_rule('/spotify', 'spotify_status', self.spotifyStatus, methods=['GET', 'POST'])
         self.app.add_url_rule('/spotify/connect', 'spotify_connect', self.spotifyConnect)
-        self.app.add_url_rule('/spotify/callback', 'spotify_callback', self.spotifyCallback)
+        self.app.add_url_rule('/spotify/callback', 'spotify_callback', self.spotifyCallback,
+                              methods=['GET', 'POST'])
         self.app.add_url_rule('/spotify/disconnect', 'spotify_disconnect', self.spotifyDisconnect, methods=['POST'])
         self.ip = os.getenv("WEB_HOST", "127.0.0.1")
         self.sliderValue = 100
@@ -102,16 +103,35 @@ class ser():
 
     def spotifyCallback(self):
         try:
-            self.spotify.complete(request.args.get('code'), request.args.get('state'),
+            parameters = request.args
+            if request.method == 'POST':
+                data = request.get_json(silent=True)
+                url = data.get('url') if isinstance(data, dict) else None
+                if not isinstance(url, str) or not url.strip() or len(url) > 8192:
+                    raise SpotifyError('Paste the full callback URL from your browser address bar.')
+                try:
+                    parsed, expected = urlsplit(url.strip()), urlsplit(self.spotify.redirect_uri)
+                    query = parse_qs(parsed.query)
+                except ValueError:
+                    raise SpotifyError('The callback URL is invalid. Copy the full browser address.') from None
+                if (parsed.scheme, parsed.netloc, parsed.path) != (expected.scheme, expected.netloc, expected.path) or parsed.fragment:
+                    raise SpotifyError('The URL must match the Spotify callback address configured on this board.')
+                if query.get('error'):
+                    raise SpotifyError('Spotify sign-in was cancelled. Connect again.')
+                if any(len(query.get(key, [])) != 1 for key in ('code', 'state')):
+                    raise SpotifyError('The callback URL must contain one code and one state. Copy the full browser address.')
+                parameters = {key: query[key][0] for key in ('code', 'state')}
+            self.spotify.complete(parameters.get('code'), parameters.get('state'),
                                   request.cookies.get('spotify_state'))
-            response = redirect('/')
+            response = jsonify(self.spotify.snapshot()) if request.method == 'POST' else redirect('/')
         except SpotifyError as error:
             response = jsonify(error=str(error))
             response.status_code = 400
         except (requests.RequestException, ValueError, OSError):
             response = jsonify(error='Could not finish Spotify sign-in. Check connection and token-file permissions, then try again.')
             response.status_code = 502
-        response.delete_cookie('spotify_state', path='/spotify/callback')
+        if response.status_code < 400:
+            response.delete_cookie('spotify_state', path='/spotify/callback')
         response.headers['Cache-Control'] = 'no-store'
         response.headers['Referrer-Policy'] = 'no-referrer'
         return response

@@ -10,7 +10,7 @@ import time
 from io import BytesIO
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, urlsplit, urlencode
 
 from PIL import Image
 
@@ -403,3 +403,81 @@ class SpotifyTests(unittest.TestCase):
             self.assertEqual(client.post('/spotify', json=dict(enabled=False, upNext=invalid)).status_code, 400)
             self.assertTrue(server.spotify.enabled)
         self.assertFalse(client.post('/spotify', json=dict(upNext=False)).json['upNext'])
+
+    def start_manual_sign_in(self):
+        server = ser()
+        client = server.app.test_client()
+        response = client.get('/spotify/connect', base_url='http://board.test:5000')
+        state = parse_qs(urlsplit(response.location).query)['state'][0]
+        url = 'http://127.0.0.1:5000/spotify/callback?' + urlencode(dict(code='private-code', state=state))
+        return server, client, state, url
+
+    def test_pasted_callback_finishes_from_original_lan_dashboard(self):
+        server, client, state, url = self.start_manual_sign_in()
+        with patch('spotify.requests.post', return_value=Mock(status_code=200,
+                json=lambda: dict(access_token='private-access', refresh_token='private-refresh'))) as post, \
+             patch('spotify.requests.get') as get:
+            response = client.post('/spotify/callback', json=dict(url=url), base_url='http://board.test:5000')
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json['connected'])
+        self.assertEqual(response.headers['Cache-Control'], 'no-store')
+        self.assertEqual(response.headers['Referrer-Policy'], 'no-referrer')
+        self.assertNotIn('private-', response.get_data(as_text=True))
+        self.assertEqual(post.call_args.kwargs['data']['code'], 'private-code')
+        self.assertNotIn(state, server.spotify.pending)
+        get.assert_not_called()  # The pasted URL is parsed, never fetched.
+        with patch('spotify.requests.post') as post:
+            replay = client.post('/spotify/callback', json=dict(url=url), base_url='http://board.test:5000')
+            self.assertEqual(replay.status_code, 400)
+            post.assert_not_called()
+
+    def test_pasted_callback_rejects_wrong_browser_or_state(self):
+        server, client, state, url = self.start_manual_sign_in()
+        with patch('spotify.requests.post') as post:
+            other_browser = server.app.test_client()
+            response = other_browser.post('/spotify/callback', json=dict(url=url), base_url='http://board.test:5000')
+            self.assertEqual(response.status_code, 400)
+            response = client.post('/spotify/callback', json=dict(url=url.replace(state, 'wrong-state')),
+                                   base_url='http://board.test:5000')
+            self.assertEqual(response.status_code, 400)
+            post.assert_not_called()
+        self.assertIn(state, server.spotify.pending)
+
+    def test_pasted_callback_validates_origin_path_and_unique_parameters(self):
+        server, client, state, url = self.start_manual_sign_in()
+        invalid = [None, '', url.replace('127.0.0.1', 'example.com'),
+                   url.replace('/spotify/callback', '/other'), url + '&state=duplicate',
+                   url + '&code=duplicate', url + '#fragment', 'x' * 8193,
+                   url.split('?')[0], url.split('?')[0] + '?error=access_denied']
+        with patch('spotify.requests.post') as post:
+            for value in invalid:
+                response = client.post('/spotify/callback', json=dict(url=value), base_url='http://board.test:5000')
+                self.assertEqual(response.status_code, 400)
+            post.assert_not_called()
+        self.assertIn(state, server.spotify.pending)
+        # Correcting a pasted URL keeps the original browser's sign-in cookie usable.
+        with patch('spotify.requests.post', return_value=Mock(status_code=200,
+                json=lambda: dict(access_token='private-access', refresh_token='private-refresh'))):
+            self.assertEqual(client.post('/spotify/callback', json=dict(url=url),
+                                        base_url='http://board.test:5000').status_code, 200)
+
+    def test_pasted_callback_expires_and_restart_requires_new_sign_in(self):
+        server, client, state, url = self.start_manual_sign_in()
+        verifier, _ = server.spotify.pending[state]
+        server.spotify.pending[state] = (verifier, time.monotonic() - 601)
+        with patch('spotify.requests.post') as post:
+            self.assertEqual(client.post('/spotify/callback', json=dict(url=url),
+                                        base_url='http://board.test:5000').status_code, 400)
+            post.assert_not_called()
+        server.spotify.pending.clear()
+        with patch('spotify.requests.post') as post:
+            self.assertEqual(client.post('/spotify/callback', json=dict(url=url),
+                                        base_url='http://board.test:5000').status_code, 400)
+            post.assert_not_called()
+
+    def test_pasted_callback_network_error_does_not_echo_code(self):
+        _, client, _, url = self.start_manual_sign_in()
+        with patch('spotify.requests.post', side_effect=OSError('private-code')):
+            response = client.post('/spotify/callback', json=dict(url=url), base_url='http://board.test:5000')
+        self.assertEqual(response.status_code, 502)
+        self.assertNotIn('private-code', response.get_data(as_text=True))

@@ -231,7 +231,7 @@ class Spotify:
             code_challenge_method='S256', code_challenge=challenge))
 
     def complete(self, code, state, cookie):
-        if not state or not cookie or not secrets.compare_digest(state, cookie):
+        if not state or not cookie or not state.isascii() or not cookie.isascii() or not secrets.compare_digest(state, cookie):
             raise SpotifyError('Sign-in expired or did not start in this browser. Connect again.')
         with self.lock:
             pending = self.pending.pop(state, None)
